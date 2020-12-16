@@ -193,7 +193,7 @@ static inline void voronoi_init(struct voronoi *restrict v,
   v->vertex_offset = (int *)malloc(v->number_of_cells * sizeof(int));
   v->cell_volume = (double *)malloc(v->number_of_cells * sizeof(double));
   v->cell_centroid = (double *)malloc(2 * v->number_of_cells * sizeof(double));
-  memcpy(v->generators, d->vertices + 6,
+  memcpy(v->generators, d->vertices + 2 * d->vertex_start,
          2 * v->number_of_cells * sizeof(double));
 
   /* loop over the triangles in the Delaunay tessellation and compute the

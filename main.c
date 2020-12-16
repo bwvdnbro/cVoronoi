@@ -178,6 +178,61 @@ static inline void print_list(int *order, double *vertices, int N,
 }
 
 /**
+ * @brief Check if the given vertex is part of a special animated path.
+ *
+ * @param i Vertex index.
+ * @param loop Loop index.
+ * @return 1 if the vertex is part of a special path, 0 otherwise.
+ */
+static inline int path_vertex(int i, int loop) {
+  return loop > 9 && (i == 12 || i == 41 || i == 67 || i == 73);
+}
+
+/**
+ * @brief Move the given vertex along the circle it is on.
+ *
+ * @param p Vertex coordinates.
+ * @param dphi Angular direction.
+ */
+static inline void move_circle(double *p, double dphi) {
+  double x = p[0] - 5.e9;
+  double y = p[1] - 5.e9;
+  double r2 = x * x + y * y;
+  double r = sqrt(r2);
+  double phi = atan2(y, x);
+  phi += dphi;
+  p[0] = r * cos(phi) + 5.e9;
+  p[1] = r * sin(phi) + 5.e9;
+}
+
+/**
+ * @brief Update the positions of vertices that follow a special path.
+ *
+ * @param loop Loop index.
+ * @param vertices Vertex coordinates.
+ */
+static inline void update_paths(int loop, double *vertices) {
+  if (loop > 9 && loop < 25) {
+    vertices[2 * 12] += 1.e8;
+    vertices[2 * 12 + 1] += 1.e8;
+
+    vertices[2 * 41] -= 1.e8;
+    vertices[2 * 41 + 1] += 1.e8;
+
+    vertices[2 * 67] += 1.e8;
+    vertices[2 * 67 + 1] -= 1.e8;
+
+    vertices[2 * 73] -= 1.e8;
+    vertices[2 * 73 + 1] -= 1.e8;
+  } else if (loop >= 25) {
+    move_circle(vertices + 2 * 12, 0.01 * M_PI);
+    move_circle(vertices + 2 * 41, 0.02 * M_PI);
+    move_circle(vertices + 2 * 67, -0.01 * M_PI);
+    move_circle(vertices + 2 * 73, -0.02 * M_PI);
+  }
+}
+
+/**
  * @brief Main program entry point.
  */
 int main() {
@@ -190,7 +245,7 @@ int main() {
   double dim[3] = {1.e10, 1.e10, 1.e10};
 
   /* define the number of vertices and set up the vertex array. */
-  const int nvert = 400;
+  const int nvert = 100;
   double *vertices = (double *)malloc(2 * nvert * sizeof(double));
 
 #ifndef REGULAR_GRID
@@ -215,14 +270,12 @@ int main() {
   }
 #endif
 
-  /* sort the vertices. We don't actually sort the vertices themselves, but
-     arg-sort them in 4 different directions: along the horizontal and vertical
-     direction and along the two diagonals. This way, we can very easily
-     determine which vertices are closest to a side or corner of the simulation
-     box, which we will use to add ghost particles required to impose the
-     periodic boundaries on the grid. */
+  /* initialize the hydro space. This is a simple copy of the box dimensions,
+     but then wrapped in the same way as it will be in the SWIFT code. */
+  struct hydro_space hs;
+  hydro_space_init(&hs, dim);
 
-  /* we first set up and initialize the index arrays we will sort */
+  /* set up index arrays for sorting */
   int *sortx = (int *)malloc(nvert * sizeof(int));
   int *sorty = (int *)malloc(nvert * sizeof(int));
   int *sortxyp = (int *)malloc(nvert * sizeof(int));
@@ -234,234 +287,275 @@ int main() {
     sortxym[i] = i;
   }
 
-  /* now we arg-sort the vertices using the custom sort functions above */
-  qsort_r(sortx, nvert, sizeof(int), sort_x_comp, vertices);
-  qsort_r(sorty, nvert, sizeof(int), sort_y_comp, vertices);
-  qsort_r(sortxyp, nvert, sizeof(int), sort_xyp_comp, vertices);
-  qsort_r(sortxym, nvert, sizeof(int), sort_xym_comp, vertices);
+  for (int loop = 0; loop < 100; ++loop) {
 
-  /* we print out the sorted vertices to check everything workes as expected */
-  print_list(sortx, vertices, nvert, "sortx.txt");
-  print_list(sorty, vertices, nvert, "sorty.txt");
-  print_list(sortxyp, vertices, nvert, "sortxyp.txt");
-  print_list(sortxym, vertices, nvert, "sortxym.txt");
+    /* sort the vertices. We don't actually sort the vertices themselves, but
+       arg-sort them in 4 different directions: along the horizontal and
+       vertical direction and along the two diagonals. This way, we can very
+       easily determine which vertices are closest to a side or corner of the
+       simulation box, which we will use to add ghost particles required to
+       impose the periodic boundaries on the grid. */
+    qsort_r(sortx, nvert, sizeof(int), sort_x_comp, vertices);
+    qsort_r(sorty, nvert, sizeof(int), sort_y_comp, vertices);
+    qsort_r(sortxyp, nvert, sizeof(int), sort_xyp_comp, vertices);
+    qsort_r(sortxym, nvert, sizeof(int), sort_xym_comp, vertices);
 
-  /* initialize the hydro space. This is a simple copy of the box dimensions,
-     but then wrapped in the same way as it will be in the SWIFT code. */
-  struct hydro_space hs;
-  hydro_space_init(&hs, dim);
+    /* we print out the sorted vertices to check everything workes as expected
+     */
+    if (loop == 0) {
+      print_list(sortx, vertices, nvert, "sortx.txt");
+      print_list(sorty, vertices, nvert, "sorty.txt");
+      print_list(sortxyp, vertices, nvert, "sortxyp.txt");
+      print_list(sortxym, vertices, nvert, "sortxym.txt");
+    }
 
-  /* initialize the delaunay tessellation structure, with initially space for
-     100 vertices and 100 triangles.
-     This will already create the extra vertices and triangles required to make
-     the incremental construction algorithm work. */
-  struct delaunay d;
-  delaunay_init(&d, &hs, 100, 100);
+    /* initialize the delaunay tessellation structure, with initially space for
+       100 vertices and 100 triangles.
+       This will already create the extra vertices and triangles required to
+       make the incremental construction algorithm work. */
+    struct delaunay d;
+    delaunay_init(&d, &hs, 100, 100);
 
-  /* now add the vertices, one by one. */
-  for (int i = 0; i < nvert; ++i) {
-    delaunay_add_vertex(&d, vertices[2 * i], vertices[2 * i + 1]);
-  }
+    /* now add the vertices, one by one. */
+    for (int i = 0; i < nvert; ++i) {
+      delaunay_add_vertex(&d, vertices[2 * i], vertices[2 * i + 1]);
+    }
 
-  /* we are done adding the original vertices. We need to consolidate the
-     indices of the original vertices within the Delaunay tessellation, so that
-     the tessellation knows that vertices added from now on are ghosts. */
-  delaunay_consolidate(&d);
+    /* we are done adding the original vertices. We need to consolidate the
+       indices of the original vertices within the Delaunay tessellation, so
+       that the tessellation knows that vertices added from now on are ghosts.
+     */
+    delaunay_consolidate(&d);
 
-  /* we are now done with the local tessellation. However, we still need to add
-     ghosts to impose the periodic boundaries. These ghosts will be periodic
-     copies of the original vertices that ensure that the incomplete cells at
-     the boundaries of the simulation box have the right shape. Within SWIFT,
-     a similar technique needs to be used to guarantee that cells near the
-     boundary of a SWIFT-cell correctly "feel" the cells in the neighbouring
-     SWIFT-cells.
-     Springel (2010) provides a criterion for completeness, which is based on
-     the radius of the circumcircles of the triangles that connect to original
-     vertices. Starting from an initial search radius, we will iteratively add
-     ghost vertices and increase this search radius until all relevant
-     circumcircle radii are smaller than the search radius. This mechanism can
-     very easily be combined with SWIFT's existing neighbour search
-     algorithms. */
+    /* we are now done with the local tessellation. However, we still need to
+       add ghosts to impose the periodic boundaries. These ghosts will be
+       periodic copies of the original vertices that ensure that the incomplete
+       cells at the boundaries of the simulation box have the right shape.
+       Within SWIFT, a similar technique needs to be used to guarantee that
+       cells near the boundary of a SWIFT-cell correctly "feel" the cells in the
+       neighbouring SWIFT-cells. Springel (2010) provides a criterion for
+       completeness, which is based on the radius of the circumcircles of the
+       triangles that connect to original vertices. Starting from an initial
+       search radius, we will iteratively add ghost vertices and increase this
+       search radius until all relevant circumcircle radii are smaller than the
+       search radius. This mechanism can very easily be combined with SWIFT's
+       existing neighbour search algorithms. */
 
-  /* Initial search radius. We use twice the average inter-particle separation,
-     but other values would also work. */
-  double r = 2. * dim[0] / sqrt(nvert);
-  /* add ghosts for the positive horizontal boundary */
-  int i = 0;
-  int vi = sortx[i];
-  while (vertices[2 * vi] < r) {
-    delaunay_add_vertex(&d, vertices[2 * vi] + dim[0], vertices[2 * vi + 1]);
-    ++i;
-    vi = sortx[i];
-  }
-  /* add ghosts for the negative horizontal boundary */
-  i = nvert - 1;
-  vi = sortx[i];
-  while (dim[0] - vertices[2 * vi] < r) {
-    delaunay_add_vertex(&d, vertices[2 * vi] - dim[0], vertices[2 * vi + 1]);
-    --i;
-    vi = sortx[i];
-  }
-  /* add ghosts for the positive vertical boundary */
-  i = 0;
-  vi = sorty[i];
-  while (vertices[2 * vi + 1] < r) {
-    delaunay_add_vertex(&d, vertices[2 * vi], vertices[2 * vi + 1] + dim[1]);
-    ++i;
-    vi = sorty[i];
-  }
-  /* add ghosts for the negative vertical boundary */
-  i = nvert - 1;
-  vi = sorty[i];
-  while (dim[1] - vertices[2 * vi + 1] < r) {
-    delaunay_add_vertex(&d, vertices[2 * vi], vertices[2 * vi + 1] - dim[1]);
-    --i;
-    vi = sorty[i];
-  }
-  /* add ghosts for the positive x=y diagonal (top right) corner */
-  i = 0;
-  vi = sortxyp[i];
-  while (vertices[2 * vi] + vertices[2 * vi + 1] < r) {
-    delaunay_add_vertex(&d, vertices[2 * vi] + dim[0],
-                        vertices[2 * vi + 1] + dim[1]);
-    ++i;
-    vi = sortxyp[i];
-  }
-  /* add ghosts for the negative x=y diagonal (bottom left) corner */
-  i = nvert - 1;
-  vi = sortxyp[i];
-  while (dim[0] - vertices[2 * vi] + dim[1] - vertices[2 * vi + 1] < r) {
-    delaunay_add_vertex(&d, vertices[2 * vi] - dim[0],
-                        vertices[2 * vi + 1] - dim[1]);
-    --i;
-    vi = sortxyp[i];
-  }
-  /* add ghosts for the positive x=-y diagonal (bottom right) corner */
-  i = 0;
-  vi = sortxym[i];
-  while (vertices[2 * vi] - dim[1] + vertices[2 * vi + 1] < r) {
-    delaunay_add_vertex(&d, vertices[2 * vi] + dim[0],
-                        vertices[2 * vi + 1] - dim[1]);
-    ++i;
-    vi = sortxym[i];
-  }
-  /* add ghosts for the negative x=-y diagonal (top left) corner */
-  i = nvert - 1;
-  vi = sortxym[i];
-  while (dim[0] - vertices[2 * vi] - vertices[2 * vi + 1] < r) {
-    delaunay_add_vertex(&d, vertices[2 * vi] - dim[0],
-                        vertices[2 * vi + 1] + dim[1]);
-    --i;
-    vi = sortxym[i];
-  }
-  /* update the search radii for all triangles in the tessellation and count
-     the number of triangles with circumcircles larger than the current search
-     radius */
-  int count = delaunay_update_search_radii(&d, r);
-  printf("count: %i\n", count);
-  /* now repeat the above until all circumcircles are smaller than the search
-     radius */
-  while (count > 0) {
-    /* we do not want to add the same ghost twice (this causes the incremental
-       construction algorithm to crash), so we need to keep track of the
-       previous search radius, so that we can only add the ghosts that have not
-       been added before */
-    double old_r = r;
-    /* now gradually increase the search radius */
-    r *= 1.5;
-    /* and repeat the additions as above */
-    i = 0;
-    vi = sortx[i];
-    while ((vertices[2 * vi] >= old_r) && (vertices[2 * vi] < r)) {
+    /* Initial search radius. We use twice the average inter-particle
+       separation, but other values would also work. */
+    double r = 2. * dim[0] / sqrt(nvert);
+    /* add ghosts for the positive horizontal boundary */
+    int i = 0;
+    int vi = sortx[i];
+    while (vertices[2 * vi] < r) {
       delaunay_add_vertex(&d, vertices[2 * vi] + dim[0], vertices[2 * vi + 1]);
       ++i;
       vi = sortx[i];
     }
+    /* add ghosts for the negative horizontal boundary */
     i = nvert - 1;
     vi = sortx[i];
-    while ((dim[0] - vertices[2 * vi] >= old_r) &&
-           (dim[0] - vertices[2 * vi] < r)) {
+    while (dim[0] - vertices[2 * vi] < r) {
       delaunay_add_vertex(&d, vertices[2 * vi] - dim[0], vertices[2 * vi + 1]);
       --i;
       vi = sortx[i];
     }
+    /* add ghosts for the positive vertical boundary */
     i = 0;
     vi = sorty[i];
-    while ((vertices[2 * vi + 1] >= old_r) && (vertices[2 * vi + 1] < r)) {
+    while (vertices[2 * vi + 1] < r) {
       delaunay_add_vertex(&d, vertices[2 * vi], vertices[2 * vi + 1] + dim[1]);
       ++i;
       vi = sorty[i];
     }
+    /* add ghosts for the negative vertical boundary */
     i = nvert - 1;
     vi = sorty[i];
-    while ((dim[1] - vertices[2 * vi + 1] >= old_r) &&
-           (dim[1] - vertices[2 * vi + 1] < r)) {
+    while (dim[1] - vertices[2 * vi + 1] < r) {
       delaunay_add_vertex(&d, vertices[2 * vi], vertices[2 * vi + 1] - dim[1]);
       --i;
       vi = sorty[i];
     }
+    /* add ghosts for the positive x=y diagonal (top right) corner */
     i = 0;
     vi = sortxyp[i];
-    while ((vertices[2 * vi] + vertices[2 * vi + 1] >= old_r) &&
-           (vertices[2 * vi] + vertices[2 * vi + 1] < r)) {
+    while (vertices[2 * vi] + vertices[2 * vi + 1] < r) {
       delaunay_add_vertex(&d, vertices[2 * vi] + dim[0],
                           vertices[2 * vi + 1] + dim[1]);
       ++i;
       vi = sortxyp[i];
     }
+    /* add ghosts for the negative x=y diagonal (bottom left) corner */
     i = nvert - 1;
     vi = sortxyp[i];
-    while (
-        (dim[0] - vertices[2 * vi] + dim[1] - vertices[2 * vi + 1] >= old_r) &&
-        (dim[0] - vertices[2 * vi] + dim[1] - vertices[2 * vi + 1] < r)) {
+    while (dim[0] - vertices[2 * vi] + dim[1] - vertices[2 * vi + 1] < r) {
       delaunay_add_vertex(&d, vertices[2 * vi] - dim[0],
                           vertices[2 * vi + 1] - dim[1]);
       --i;
       vi = sortxyp[i];
     }
+    /* add ghosts for the positive x=-y diagonal (bottom right) corner */
     i = 0;
     vi = sortxym[i];
-    while ((vertices[2 * vi] - dim[1] + vertices[2 * vi + 1] >= old_r) &&
-           (vertices[2 * vi] - dim[1] + vertices[2 * vi + 1] < r)) {
+    while (vertices[2 * vi] - dim[1] + vertices[2 * vi + 1] < r) {
       delaunay_add_vertex(&d, vertices[2 * vi] + dim[0],
                           vertices[2 * vi + 1] - dim[1]);
       ++i;
       vi = sortxym[i];
     }
+    /* add ghosts for the negative x=-y diagonal (top left) corner */
     i = nvert - 1;
     vi = sortxym[i];
-    while ((dim[0] - vertices[2 * vi] - vertices[2 * vi + 1] >= old_r) &&
-           (dim[0] - vertices[2 * vi] - vertices[2 * vi + 1] < r)) {
+    while (dim[0] - vertices[2 * vi] - vertices[2 * vi + 1] < r) {
       delaunay_add_vertex(&d, vertices[2 * vi] - dim[0],
                           vertices[2 * vi + 1] + dim[1]);
       --i;
       vi = sortxym[i];
     }
-    /* update the search radii to the new value and count the number of larger
-       circumcircles. */
-    count = delaunay_update_search_radii(&d, r);
+    /* update the search radii for all triangles in the tessellation and count
+       the number of triangles with circumcircles larger than the current search
+       radius */
+    int count = delaunay_update_search_radii(&d, r);
     printf("count: %i\n", count);
+    /* now repeat the above until all circumcircles are smaller than the search
+       radius */
+    while (count > 0) {
+      /* we do not want to add the same ghost twice (this causes the incremental
+         construction algorithm to crash), so we need to keep track of the
+         previous search radius, so that we can only add the ghosts that have
+         not been added before */
+      double old_r = r;
+      /* now gradually increase the search radius */
+      r *= 1.5;
+      /* and repeat the additions as above */
+      i = 0;
+      vi = sortx[i];
+      while ((vertices[2 * vi] >= old_r) && (vertices[2 * vi] < r)) {
+        delaunay_add_vertex(&d, vertices[2 * vi] + dim[0],
+                            vertices[2 * vi + 1]);
+        ++i;
+        vi = sortx[i];
+      }
+      i = nvert - 1;
+      vi = sortx[i];
+      while ((dim[0] - vertices[2 * vi] >= old_r) &&
+             (dim[0] - vertices[2 * vi] < r)) {
+        delaunay_add_vertex(&d, vertices[2 * vi] - dim[0],
+                            vertices[2 * vi + 1]);
+        --i;
+        vi = sortx[i];
+      }
+      i = 0;
+      vi = sorty[i];
+      while ((vertices[2 * vi + 1] >= old_r) && (vertices[2 * vi + 1] < r)) {
+        delaunay_add_vertex(&d, vertices[2 * vi],
+                            vertices[2 * vi + 1] + dim[1]);
+        ++i;
+        vi = sorty[i];
+      }
+      i = nvert - 1;
+      vi = sorty[i];
+      while ((dim[1] - vertices[2 * vi + 1] >= old_r) &&
+             (dim[1] - vertices[2 * vi + 1] < r)) {
+        delaunay_add_vertex(&d, vertices[2 * vi],
+                            vertices[2 * vi + 1] - dim[1]);
+        --i;
+        vi = sorty[i];
+      }
+      i = 0;
+      vi = sortxyp[i];
+      while ((vertices[2 * vi] + vertices[2 * vi + 1] >= old_r) &&
+             (vertices[2 * vi] + vertices[2 * vi + 1] < r)) {
+        delaunay_add_vertex(&d, vertices[2 * vi] + dim[0],
+                            vertices[2 * vi + 1] + dim[1]);
+        ++i;
+        vi = sortxyp[i];
+      }
+      i = nvert - 1;
+      vi = sortxyp[i];
+      while ((dim[0] - vertices[2 * vi] + dim[1] - vertices[2 * vi + 1] >=
+              old_r) &&
+             (dim[0] - vertices[2 * vi] + dim[1] - vertices[2 * vi + 1] < r)) {
+        delaunay_add_vertex(&d, vertices[2 * vi] - dim[0],
+                            vertices[2 * vi + 1] - dim[1]);
+        --i;
+        vi = sortxyp[i];
+      }
+      i = 0;
+      vi = sortxym[i];
+      while ((vertices[2 * vi] - dim[1] + vertices[2 * vi + 1] >= old_r) &&
+             (vertices[2 * vi] - dim[1] + vertices[2 * vi + 1] < r)) {
+        delaunay_add_vertex(&d, vertices[2 * vi] + dim[0],
+                            vertices[2 * vi + 1] - dim[1]);
+        ++i;
+        vi = sortxym[i];
+      }
+      i = nvert - 1;
+      vi = sortxym[i];
+      while ((dim[0] - vertices[2 * vi] - vertices[2 * vi + 1] >= old_r) &&
+             (dim[0] - vertices[2 * vi] - vertices[2 * vi + 1] < r)) {
+        delaunay_add_vertex(&d, vertices[2 * vi] - dim[0],
+                            vertices[2 * vi + 1] + dim[1]);
+        --i;
+        vi = sortxym[i];
+      }
+      /* update the search radii to the new value and count the number of larger
+         circumcircles. */
+      count = delaunay_update_search_radii(&d, r);
+      printf("count: %i\n", count);
+    }
+
+    /* the Delaunay tessellation is now complete. Print it out for visual
+       inspection. */
+    char filename[50];
+    sprintf(filename, "test%03i.txt", loop);
+    delaunay_print_tessellation(&d, filename);
+
+    /* Convert the Delaunay tessellation into a Voronoi grid. */
+    struct voronoi v;
+    voronoi_init(&v, &d);
+
+    /* Get rid of the Delaunay tessellation. */
+    delaunay_destroy(&d);
+
+    /* sanity check(s) on the Voronoi grid */
+    voronoi_check_grid(&v);
+
+    /* Now print the Voronoi grid for visual inspection. */
+    sprintf(filename, "vtest%03i.txt", loop);
+    voronoi_print_grid(&v, filename);
+
+    /* apply Lloyd's algorithm to regularise the grid */
+    for (int i = 0; i < nvert; ++i) {
+      if (!path_vertex(i, loop)) {
+        vertices[2 * i] = v.cell_centroid[2 * i];
+        vertices[2 * i + 1] = v.cell_centroid[2 * i + 1];
+        /* we also add a small circular movement to the grid */
+        move_circle(vertices + 2 * i, 0.004 * M_PI);
+      }
+    }
+    /* update the positions of vertices on special paths */
+    update_paths(loop, vertices);
+    /* impose periodic boundaries (we apply this after moving vertices on
+       special paths to make sure these also satisfy the periodic boundaries) */
+    for (int i = 0; i < nvert; ++i) {
+      if (vertices[2 * i] < 0.) {
+        vertices[2 * i] += dim[0];
+      }
+      if (vertices[2 * i] >= dim[0]) {
+        vertices[2 * i] -= dim[0];
+      }
+      if (vertices[2 * i + 1] < 0.) {
+        vertices[2 * i + 1] += dim[1];
+      }
+      if (vertices[2 * i + 1] >= dim[1]) {
+        vertices[2 * i + 1] -= dim[1];
+      }
+    }
+
+    /* Get rid of the Voronoi grid. */
+    voronoi_destroy(&v);
   }
-
-  /* the Delaunay tessellation is now complete. Print it out for visual
-     inspection. */
-  delaunay_print_tessellation(&d, "test.txt");
-
-  /* Convert the Delaunay tessellation into a Voronoi grid. */
-  struct voronoi v;
-  voronoi_init(&v, &d);
-
-  /* Get rid of the Delaunay tessellation. */
-  delaunay_destroy(&d);
-
-  /* sanity check(s) on the Voronoi grid */
-  voronoi_check_grid(&v);
-
-  /* Now print the Voronoi grid for visual inspection. */
-  voronoi_print_grid(&v, "vtest.txt");
-
-  /* Get rid of the Voronoi grid. */
-  voronoi_destroy(&v);
 
   /* Get rid of the sort arrays and the vertex array. */
   free(sortx);
