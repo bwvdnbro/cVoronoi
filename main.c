@@ -454,6 +454,9 @@ int main() {
   /* Get rid of the Delaunay tessellation. */
   delaunay_destroy(&d);
 
+  /* sanity check(s) on the Voronoi grid */
+  voronoi_check_grid(&v);
+
   /* Now print the Voronoi grid for visual inspection. */
   voronoi_print_grid(&v, "vtest.txt");
 

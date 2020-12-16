@@ -52,6 +52,12 @@ struct voronoi {
    *  array. */
   int *vertex_offset;
 
+  /*! @brief Volume of each cell. */
+  double *cell_volume;
+
+  /*! @brief Centroid position of each cell. */
+  double *cell_centroid;
+
   /*! @brief Number of cells (and number of generators). */
   int number_of_cells;
 
@@ -73,6 +79,12 @@ struct voronoi {
    *  to make and edge with connections[vertex_offset[i]]. */
   int *connections;
 
+  /*! @brief Midpoint of each edge connection. */
+  double *face_midpoints;
+
+  /*! @brief Length of each edge connection. */
+  double *face_areas;
+
   /*! @brief Number of connections. */
   int connection_index;
 
@@ -83,6 +95,75 @@ struct voronoi {
 };
 
 /**
+ * @brief Add a new edge connection to the grid.
+ *
+ * @param v Voronoi grid.
+ * @return Index of the new connection.
+ */
+static inline int voronoi_add_connection(struct voronoi *restrict v) {
+
+  /* first check if we have valid elements */
+  if (v->connection_index == v->connection_size) {
+    /* no: double the size of the arrays */
+    v->connection_size <<= 1;
+    v->connections =
+        (int *)realloc(v->connections, v->connection_size * sizeof(int));
+    v->face_midpoints = (double *)realloc(
+        v->face_midpoints, 2 * v->connection_size * sizeof(double));
+    v->face_areas =
+        (double *)realloc(v->face_areas, v->connection_size * sizeof(double));
+  }
+  /* return the old index and increment it. connection_index now corresponds
+     to the size of the array and to the index of the next free element */
+  return v->connection_index++;
+}
+
+/**
+ * @brief Compute the volume and centroid of the triangle through the given 3
+ * points.
+ *
+ * @param ax, ay, bx, by, cx, cy Point coordinates.
+ * @param result Centroid of the triangle.
+ * @return Volume of the triangle.
+ */
+static inline double voronoi_compute_centroid_volume_triangle(
+    double ax, double ay, double bx, double by, double cx, double cy,
+    double *result) {
+
+  result[0] = (ax + bx + cx) / 3.;
+  result[1] = (ay + by + cy) / 3.;
+
+  double s10x = bx - ax;
+  double s10y = by - ay;
+
+  double s20x = cx - ax;
+  double s20y = cy - ay;
+
+  return 0.5 * fabs(s10x * s20y - s20x * s10y);
+}
+
+/**
+ * @brief Compute the midpoint and surface area of the face with the given
+ * vertices.
+ *
+ * @param ax, ay, bx, by Face vertices.
+ * @param result Midpoint of the face.
+ * @return Surface area of the face.
+ */
+static inline double voronoi_compute_midpoint_area_face(double ax, double ay,
+                                                        double bx, double by,
+                                                        double *result) {
+
+  result[0] = 0.5 * (ax + bx);
+  result[1] = 0.5 * (ay + by);
+
+  double sx = bx - ax;
+  double sy = by - ay;
+
+  return sqrt(sx * sx + sy * sy);
+}
+
+/**
  * @brief Initialise the Voronoi grid based on the given Delaunay tessellation.
  *
  * This function allocates the memory for the Voronoi grid arrays and creates
@@ -91,6 +172,9 @@ struct voronoi {
  *     Delaunay triangles.
  *  2. Looping over all vertices and for each vertex looping (in
  *     counterclockwise order) over all triangles that link to that vertex.
+ *
+ * During the second step, the geometrical properties (cell centroid, volume
+ * and face midpoint, area) are computed as well.
  *
  * @param v Voronoi grid.
  * @param d Delaunay tessellation (read-only).
@@ -107,6 +191,8 @@ static inline void voronoi_init(struct voronoi *restrict v,
   v->generators = (double *)malloc(2 * v->number_of_cells * sizeof(double));
   v->vertex_number = (int *)malloc(v->number_of_cells * sizeof(int));
   v->vertex_offset = (int *)malloc(v->number_of_cells * sizeof(int));
+  v->cell_volume = (double *)malloc(v->number_of_cells * sizeof(double));
+  v->cell_centroid = (double *)malloc(2 * v->number_of_cells * sizeof(double));
   memcpy(v->generators, d->vertices + 6,
          2 * v->number_of_cells * sizeof(double));
 
@@ -153,11 +239,26 @@ static inline void voronoi_init(struct voronoi *restrict v,
      beforehand, so we have to guess the size of the connections array and
      update it as we go. */
   v->connections = (int *)malloc(v->number_of_cells * sizeof(int));
+  v->face_midpoints = (double *)malloc(2 * v->number_of_cells * sizeof(double));
+  v->face_areas = (double *)malloc(v->number_of_cells * sizeof(double));
   v->connection_index = 0;
   v->connection_size = v->number_of_cells;
   /* loop over all cell generators, and hence over all non-ghost, non-dummy
      Delaunay vertices */
   for (int i = 0; i < v->number_of_cells; ++i) {
+
+    /* initialise the cell volume and centroid and the temporary variables used
+       to compute the centroid */
+    v->cell_volume[i] = 0.;
+    v->cell_centroid[2 * i] = 0.;
+    v->cell_centroid[2 * i + 1] = 0.;
+    double centroid[2];
+
+    /* get the generator position, we use it during centroid/volume
+       calculations */
+    double ax = v->generators[2 * i];
+    double ay = v->generators[2 * i + 1];
+
     /* Get a triangle containing this generator and the index of the generator
        within that triangle */
     int t0 = d->vertex_triangles[i + d->vertex_start];
@@ -165,14 +266,14 @@ static inline void voronoi_init(struct voronoi *restrict v,
     /* Add the first vertex for this cell: the circumcircle midpoint of this
        triangle */
     v->vertex_number[i] = 1;
-    if (v->connection_index == v->connection_size) {
-      v->connection_size <<= 1;
-      v->connections =
-          (int *)realloc(v->connections, v->connection_size * sizeof(int));
-    }
-    int c0 = v->connection_index++;
+    int c0 = voronoi_add_connection(v);
     v->vertex_offset[i] = c0;
     v->connections[c0] = t0 - 3;
+
+    /* store the current vertex position for geometry calculations */
+    double cx = v->vertices[2 * v->connections[c0]];
+    double cy = v->vertices[2 * v->connections[c0] + 1];
+
     /* now use knowledge of the triangle orientation convention to obtain the
        next neighbouring triangle that has this generator as vertex, in the
        counterclockwise direction */
@@ -182,17 +283,53 @@ static inline void voronoi_init(struct voronoi *restrict v,
     /* loop around until we arrive back at the original triangle */
     while (t1 != t0) {
       ++v->vertex_number[i];
-      if (v->connection_index == v->connection_size) {
-        v->connection_size <<= 1;
-        v->connections =
-            (int *)realloc(v->connections, v->connection_size * sizeof(int));
-      }
-      int c1 = v->connection_index++;
+      int c1 = voronoi_add_connection(v);
       v->connections[c1] = t1 - 3;
+
+      /* get the current vertex position for geometry calculations.
+         Each calculation involves the current and the previous vertex.
+         The face geometry is completely determined by these (the face is in
+         this case simply the line segment between (bx,by) and (cx,cy).
+         The cell geometry is calculated by accumulating the centroid and
+         "volume" for the triangle (ax, ay) - (bx, by) - (cx, cy). */
+      double bx = cx;
+      double by = cy;
+      cx = v->vertices[2 * v->connections[c1]];
+      cy = v->vertices[2 * v->connections[c1] + 1];
+
+      double V = voronoi_compute_centroid_volume_triangle(ax, ay, bx, by, cx,
+                                                          cy, centroid);
+      v->cell_volume[i] += V;
+      v->cell_centroid[2 * i] += V * centroid[0];
+      v->cell_centroid[2 * i + 1] += V * centroid[1];
+
+      v->face_areas[c1] = voronoi_compute_midpoint_area_face(
+          bx, by, cx, cy, v->face_midpoints + 2 * c1);
+
       int vi1p2 = (vi1 + 2) % 3;
       vi1 = d->triangles[t1].index_in_neighbour[vi1p2];
       t1 = d->triangles[t1].neighbours[vi1p2];
     }
+
+    /* don't forget the last edge for the geometry! */
+    double bx = cx;
+    double by = cy;
+    cx = v->vertices[2 * v->connections[c0]];
+    cy = v->vertices[2 * v->connections[c0] + 1];
+
+    double V = voronoi_compute_centroid_volume_triangle(ax, ay, bx, by, cx, cy,
+                                                        centroid);
+    v->cell_volume[i] += V;
+    v->cell_centroid[2 * i] += V * centroid[0];
+    v->cell_centroid[2 * i + 1] += V * centroid[1];
+
+    v->face_areas[c0] = voronoi_compute_midpoint_area_face(
+        bx, by, cx, cy, v->face_midpoints + 2 * c0);
+
+    /* now compute the actual centroid by dividing the volume-weighted
+       accumulators by the cell volume */
+    v->cell_centroid[2 * i] /= v->cell_volume[i];
+    v->cell_centroid[2 * i + 1] /= v->cell_volume[i];
   }
 }
 
@@ -209,14 +346,30 @@ static inline void voronoi_destroy(struct voronoi *restrict v) {
 }
 
 /**
+ * @brief Sanity checks on the grid.
+ *
+ * Right now, this only checks the total volume of the cells.
+ */
+static inline void voronoi_check_grid(const struct voronoi *restrict v) {
+  double V = 0.;
+  for (int i = 0; i < v->number_of_cells; ++i) {
+    V += v->cell_volume[i];
+  }
+
+  printf("Total volume: %g\n", V);
+}
+
+/**
  * @brief Print the Voronoi grid to a file with the given name.
  *
  * The grid is output as follows:
  *  1. First, each generator is output, together with all its connections.
  *     The generator is output as "G\tx\ty\n", where x and y are the coordinates
- *     of the generator.
+ *     of the generator. The centroid of the corresponding cell is output as
+ *     "M\tx\ty\n".
  *     The connections are output as "C\tindex\tindex\n", where the two indices
  *     are the indices of two vertices of the grid, in the order output by 2.
+ *     The midpoint of each edge is output as "F\tx\ty\n".
  *  2. Next, all vertices of the grid are output, in the format "V\tx\ty\n".
  *
  * @param v Voronoi grid (read-only).
@@ -230,13 +383,20 @@ static inline void voronoi_print_grid(const struct voronoi *restrict v,
   for (int i = 0; i < v->number_of_cells; ++i) {
     fprintf(file, "G\t%g\t%g\n", v->generators[2 * i],
             v->generators[2 * i + 1]);
+    fprintf(file, "M\t%g\t%g\n", v->cell_centroid[2 * i],
+            v->cell_centroid[2 * i + 1]);
     for (int j = 1; j < v->vertex_number[i]; ++j) {
-      fprintf(file, "C\t%i\t%i\n", v->connections[v->vertex_offset[i] + j - 1],
-              v->connections[v->vertex_offset[i] + j]);
+      int cjm1 = v->vertex_offset[i] + j - 1;
+      int cj = v->vertex_offset[i] + j;
+      fprintf(file, "C\t%i\t%i\n", v->connections[cjm1], v->connections[cj]);
+      fprintf(file, "F\t%g\t%g\n", v->face_midpoints[2 * cj],
+              v->face_midpoints[2 * cj + 1]);
     }
     fprintf(file, "C\t%i\t%i\n",
             v->connections[v->vertex_offset[i] + v->vertex_number[i] - 1],
             v->connections[v->vertex_offset[i]]);
+    fprintf(file, "F\t%g\t%g\n", v->face_midpoints[2 * v->vertex_offset[i]],
+            v->face_midpoints[2 * v->vertex_offset[i] + 1]);
   }
   for (int i = 0; i < v->vertex_index; ++i) {
     fprintf(file, "V\t%g\t%g\n", v->vertices[2 * i], v->vertices[2 * i + 1]);

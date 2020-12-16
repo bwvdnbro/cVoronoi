@@ -12,6 +12,10 @@ args = argparser.parse_args()
 
 gs = np.fromregex("vtest.txt", "G\s+(\S+)\s+(\S+)",
                  [("x", np.float64), ("y", np.float64)])
+ms = np.fromregex("vtest.txt", "M\s+(\S+)\s+(\S+)",
+                 [("x", np.float64), ("y", np.float64)])
+fs = np.fromregex("vtest.txt", "F\s+(\S+)\s+(\S+)",
+                 [("x", np.float64), ("y", np.float64)])
 vs = np.fromregex("vtest.txt", "V\s+(\S+)\s+(\S+)",
                  [("x", np.float64), ("y", np.float64)])
 cs = np.fromregex("vtest.txt", "C\s+(\d+)\s+(\d+)",
@@ -35,6 +39,8 @@ for ix in range(-1, 2):
         pl.plot(vs[it]["x"]+ix*1.e10, vs[it]["y"]+iy*1.e10, "b-")
 
 pl.plot(gs["x"], gs["y"], "g.")
+#pl.plot(ms["x"], ms["y"], "y.")
+#pl.plot(fs["x"], fs["y"], "r.")
 #pl.plot(vs["x"], vs["y"], "r.")
 
 pl.xlim(*xlim)
