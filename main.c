@@ -42,6 +42,7 @@
 #define _GNU_SOURCE
 
 #include "delaunay.h"
+#include "hilbert.h"
 #include "voronoi.h"
 
 /**
@@ -58,13 +59,32 @@ static inline double get_random_uniform_double() {
 }
 
 /**
- * @brief Comparison function for two double precision values.
+ * @brief Comparison function for two double precision floating point values.
  *
  * @param a First value.
  * @param b Second value.
  * @return -1 if a < b, 0 if a == b, +1 if a > b.
  */
 int compare_double(const double a, const double b) {
+  if (a < b) {
+    return -1;
+  } else {
+    if (a > b) {
+      return 1;
+    } else {
+      return 0;
+    }
+  }
+}
+
+/**
+ * @brief Comparison function for two unsigned long values.
+ *
+ * @param a First value.
+ * @param b Second value.
+ * @return -1 if a < b, 0 if a == b, +1 if a > b.
+ */
+int compare_unsigned_long(const unsigned long a, const unsigned long b) {
   if (a < b) {
     return -1;
   } else {
@@ -154,6 +174,24 @@ int sort_xym_comp(const void *a, const void *b, void *x) {
   double bx = vertices[2 * bi];
   double by = vertices[2 * bi + 1];
   return compare_double(ax - ay, bx - by);
+}
+
+/**
+ * @brief Sorting function used to sort vertices on their Hilbert key.
+ *
+ * @param a First index.
+ * @param b Second index.
+ * @param x Hilbert key array to sort.
+ * @return Return value of compare_unsigned_long() for the hilbert key of
+ * vertices a and b.
+ */
+int sort_h_comp(const void *a, const void *b, void *x) {
+  int ai = *(int *)a;
+  int bi = *(int *)b;
+  unsigned long *keys = (unsigned long *)x;
+  unsigned long ah = keys[ai];
+  unsigned long bh = keys[bi];
+  return compare_unsigned_long(ah, bh);
 }
 
 /**
@@ -275,19 +313,32 @@ int main() {
   struct hydro_space hs;
   hydro_space_init(&hs, dim);
 
+  /* set up the Hilbert key array */
+  unsigned long *hkeys = (unsigned long *)malloc(nvert * sizeof(unsigned long));
+
   /* set up index arrays for sorting */
   int *sortx = (int *)malloc(nvert * sizeof(int));
   int *sorty = (int *)malloc(nvert * sizeof(int));
   int *sortxyp = (int *)malloc(nvert * sizeof(int));
   int *sortxym = (int *)malloc(nvert * sizeof(int));
+  int *sorth = (int *)malloc(nvert * sizeof(int));
   for (int i = 0; i < nvert; ++i) {
     sortx[i] = i;
     sorty[i] = i;
     sortxyp[i] = i;
     sortxym[i] = i;
+    sorth[i] = i;
   }
 
   for (int loop = 0; loop < 100; ++loop) {
+
+    /* calculate/update Hilbert keys for all vertices */
+    for (int i = 0; i < nvert; ++i) {
+      unsigned long bits[2];
+      bits[0] = vertices[2 * i] * 1.e-10 * (1ul << 32);
+      bits[1] = vertices[2 * i + 1] * 1.e-10 * (1ul << 32);
+      hkeys[i] = hilbert_get_key_2d(bits, 64);
+    }
 
     /* sort the vertices. We don't actually sort the vertices themselves, but
        arg-sort them in 4 different directions: along the horizontal and
@@ -299,6 +350,9 @@ int main() {
     qsort_r(sorty, nvert, sizeof(int), sort_y_comp, vertices);
     qsort_r(sortxyp, nvert, sizeof(int), sort_xyp_comp, vertices);
     qsort_r(sortxym, nvert, sizeof(int), sort_xym_comp, vertices);
+    /* we also sort on Hilbert key, for faster insertion during the initial
+       loop */
+    qsort_r(sorth, nvert, sizeof(int), sort_h_comp, hkeys);
 
     /* we print out the sorted vertices to check everything workes as expected
      */
@@ -316,9 +370,10 @@ int main() {
     struct delaunay d;
     delaunay_init(&d, &hs, 100, 100);
 
-    /* now add the vertices, one by one. */
+    /* now add the vertices, one by one, in Hilbert order. */
     for (int i = 0; i < nvert; ++i) {
-      delaunay_add_vertex(&d, vertices[2 * i], vertices[2 * i + 1]);
+      int j = sorth[i];
+      delaunay_add_vertex(&d, vertices[2 * j], vertices[2 * j + 1]);
     }
 
     /* we are done adding the original vertices. We need to consolidate the
@@ -527,11 +582,12 @@ int main() {
 
     /* apply Lloyd's algorithm to regularise the grid */
     for (int i = 0; i < nvert; ++i) {
-      if (!path_vertex(i, loop)) {
-        vertices[2 * i] = v.cell_centroid[2 * i];
-        vertices[2 * i + 1] = v.cell_centroid[2 * i + 1];
+      int j = sorth[i];
+      if (!path_vertex(j, loop)) {
+        vertices[2 * j] = v.cell_centroid[2 * i];
+        vertices[2 * j + 1] = v.cell_centroid[2 * i + 1];
         /* we also add a small circular movement to the grid */
-        move_circle(vertices + 2 * i, 0.004 * M_PI);
+        move_circle(vertices + 2 * j, 0.004 * M_PI);
       }
     }
     /* update the positions of vertices on special paths */
@@ -562,6 +618,8 @@ int main() {
   free(sorty);
   free(sortxyp);
   free(sortxym);
+  free(sorth);
+  free(hkeys);
   free(vertices);
 
   /* We are done. */

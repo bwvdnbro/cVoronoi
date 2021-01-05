@@ -341,8 +341,13 @@ static inline void voronoi_init(struct voronoi *restrict v,
 static inline void voronoi_destroy(struct voronoi *restrict v) {
   free(v->generators);
   free(v->vertex_number);
+  free(v->vertex_offset);
+  free(v->cell_volume);
+  free(v->cell_centroid);
   free(v->vertices);
   free(v->connections);
+  free(v->face_midpoints);
+  free(v->face_areas);
 }
 
 /**

@@ -641,6 +641,7 @@ inline static void delaunay_destroy(struct delaunay* restrict d) {
   free(d->integer_vertices);
   free(d->vertex_triangles);
   free(d->vertex_triangle_index);
+  free(d->search_radii);
   free(d->triangles);
   free(d->queue);
   geometry_destroy(&d->geometry);

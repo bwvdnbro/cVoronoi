@@ -26,7 +26,7 @@ args = argparser.parse_args()
 do_delaunay = False
 
 paths = [np.zeros((100, 4)), np.zeros((100, 4))]
-for i in range(100):
+for i in range(3):
     print(i)
     vname = "vtest{0:03d}.txt".format(i)
     gs = np.fromregex(
