@@ -38,7 +38,7 @@
 #include "triangle.h"
 
 /*! @brief Activate extensive log output. */
-/*#define DELAUNAY_LOG_OUTPUT*/
+#define DELAUNAY_LOG_OUTPUT
 /*! @brief Activate runtime assertions. */
 #define DELAUNAY_DO_ASSERTIONS
 /*! @brief Use and output non-exact floating point geometrical tests as well as
@@ -50,7 +50,7 @@
  *  of a new vertex. This feature is very helpful when debugging to catch
  *  problems as they happen, but adds a very significant runtime cost. It should
  *  never be activated for production runs! */
-/*#define DELAUNAY_CHECKS*/
+#define DELAUNAY_CHECKS
 
 /**
  * @brief Print the given message to the standard output.
@@ -61,9 +61,9 @@
  * This macro is only defined when DELAUNAY_LOG_OUTPUT is active.
  */
 #ifdef DELAUNAY_LOG_OUTPUT
-#define delaunay_log(s, ...)                                      \
-  printf("%s:%s():%i: " s "\n", __FILE__, __FUNCTION__, __LINE__, \
-         ##__VA_ARGS__);
+#define delaunay_log(s, ...)                                               \
+  fprintf(stderr, "%s:%s():%i: " s "\n", __FILE__, __FUNCTION__, __LINE__, \
+          ##__VA_ARGS__);
 #else
 #define delaunay_log(s, ...)
 #endif
@@ -792,7 +792,7 @@ inline static int delaunay_choose(int ngb0, int ngb1) {
 inline static int delaunay_test_point_inside_triangle(
     struct delaunay* restrict d, int v, int t, int* t_new, int* ngb_index) {
 
-  delaunay_log("Checking if vertex %i is inside triange %i", v, t);
+  delaunay_log("Checking if vertex %i is inside triangle %i", v, t);
 
   /* make sure we are not testing a dummy triangle. Since the dummies lie
      outside the triangle that is supposed to contain all vertices (including
@@ -911,14 +911,17 @@ inline static int delaunay_test_point_inside_triangle(
     case 26:
       /* testi0 is zero */
       *t_new = d->triangles[t].neighbours[0];
+      *ngb_index = 0;
       return 2;
     case 38:
       /* testi1 is zero */
       *t_new = d->triangles[t].neighbours[1];
+      *ngb_index = 1;
       return 2;
     case 41:
       /* testi2 is zero */
       *t_new = d->triangles[t].neighbours[2];
+      *ngb_index = 2;
       return 2;
     case 42:
       /* all tests returned 1 (testsum is 32 + 8 + 2) */
@@ -1167,8 +1170,8 @@ inline static void delaunay_check_triangles(struct delaunay* restrict d) {
  * @param x Horizontal coordinate of the new vertex.
  * @param y Vertical coordinate of the new vertex.
  */
-inline static void delaunay_add_vertex(struct delaunay* restrict d, double x,
-                                       double y) {
+inline static void delaunay_add_vertex_func(struct delaunay* restrict d,
+                                            double x, double y) {
 
   delaunay_log("Adding vertex with position %g %g", x, y);
 
@@ -1259,6 +1262,14 @@ inline static void delaunay_add_vertex(struct delaunay* restrict d, double x,
 
     delaunay_log("Degenerate insertion!");
 
+    delaunay_log("t0: %i, t1: %i, ngb_index: %i", t0, t1, ngb_index);
+    delaunay_log("ngbs0: %i %i %i", d->triangles[t0].neighbours[0],
+                 d->triangles[t0].neighbours[1],
+                 d->triangles[t0].neighbours[2]);
+    delaunay_log("ngbs1: %i %i %i", d->triangles[t1].neighbours[0],
+                 d->triangles[t1].neighbours[1],
+                 d->triangles[t1].neighbours[2]);
+
     delaunay_assert(d->triangles[t0].neighbours[ngb_index] == t1);
 
     /* the new vertex lies on the edge separating triangles t0 and t1
@@ -1289,10 +1300,10 @@ inline static void delaunay_add_vertex(struct delaunay* restrict d, double x,
     int ngb0_2 = d->triangles[t0].neighbours[i0_2];
     int ngbi0_2 = d->triangles[t0].index_in_neighbour[i0_2];
 
-    int ngb1_1 = d->triangles[t0].neighbours[i1_1];
-    int ngbi1_1 = d->triangles[t0].index_in_neighbour[i1_1];
-    int ngb1_2 = d->triangles[t0].neighbours[i1_2];
-    int ngbi1_2 = d->triangles[t0].index_in_neighbour[i1_2];
+    int ngb1_1 = d->triangles[t1].neighbours[i1_1];
+    int ngbi1_1 = d->triangles[t1].index_in_neighbour[i1_1];
+    int ngb1_2 = d->triangles[t1].neighbours[i1_2];
+    int ngbi1_2 = d->triangles[t1].index_in_neighbour[i1_2];
 
     int t2 = delaunay_new_triangle(d);
     int t3 = delaunay_new_triangle(d);
@@ -1355,6 +1366,11 @@ inline static void delaunay_add_vertex(struct delaunay* restrict d, double x,
   /* perform a consistency test if enabled */
   delaunay_check_tessellation(d);
 }
+
+#define delaunay_add_vertex(d, x, y)                                           \
+  fprintf(stderr, "%s:%s():%i: adding vertex %g %g\n", __FILE__, __FUNCTION__, \
+          __LINE__, x, y);                                                     \
+  delaunay_add_vertex_func(d, x, y);
 
 /**
  * @brief Output the tessellation to a text file with the given name.

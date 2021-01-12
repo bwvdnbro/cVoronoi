@@ -280,18 +280,24 @@ int main() {
 
   /* dimensions of the simulation box. We purposefully use large numbers to
      make sure the internal conversion routines are properly tested. */
-  double dim[3] = {1.e10, 1.e10, 1.e10};
+  /*  double dim[3] = {1.e10, 1.e10, 1.e10};*/
+  double dim[3] = {1., 1., 1.};
 
   /* define the number of vertices and set up the vertex array. */
-  const int nvert = 100;
+  const int nvert = 64;
   double *vertices = (double *)malloc(2 * nvert * sizeof(double));
 
 #ifndef REGULAR_GRID
-  /* initialize random uniform vertex positions */
+  FILE *ifile = fopen("generators-241.txt", "r");
   for (int i = 0; i < nvert; ++i) {
+    fscanf(ifile, "%lg\t%lg\n", &vertices[2 * i], &vertices[2 * i + 1]);
+  }
+  fclose(ifile);
+  /* initialize random uniform vertex positions */
+/*  for (int i = 0; i < nvert; ++i) {
     vertices[2 * i] = 1.e10 * get_random_uniform_double();
     vertices[2 * i + 1] = 1.e10 * get_random_uniform_double();
-  }
+  }*/
 #else
   /* initialize a regular grid of vertex positions with small random
      perturbations. */
@@ -405,14 +411,17 @@ int main() {
     while (vertices[2 * vi] < r) {
       delaunay_add_vertex(&d, vertices[2 * vi] + dim[0], vertices[2 * vi + 1]);
       ++i;
+      if (i == nvert) break;
       vi = sortx[i];
     }
     /* add ghosts for the negative horizontal boundary */
     i = nvert - 1;
     vi = sortx[i];
     while (dim[0] - vertices[2 * vi] < r) {
+      delaunay_log("x: %g, r: %g", dim[0] - vertices[2 * vi], r);
       delaunay_add_vertex(&d, vertices[2 * vi] - dim[0], vertices[2 * vi + 1]);
       --i;
+      if (i == -1) break;
       vi = sortx[i];
     }
     /* add ghosts for the positive vertical boundary */
@@ -421,6 +430,7 @@ int main() {
     while (vertices[2 * vi + 1] < r) {
       delaunay_add_vertex(&d, vertices[2 * vi], vertices[2 * vi + 1] + dim[1]);
       ++i;
+      if (i == nvert) break;
       vi = sorty[i];
     }
     /* add ghosts for the negative vertical boundary */
@@ -429,6 +439,7 @@ int main() {
     while (dim[1] - vertices[2 * vi + 1] < r) {
       delaunay_add_vertex(&d, vertices[2 * vi], vertices[2 * vi + 1] - dim[1]);
       --i;
+      if (i == -1) break;
       vi = sorty[i];
     }
     /* add ghosts for the positive x=y diagonal (top right) corner */
@@ -438,6 +449,7 @@ int main() {
       delaunay_add_vertex(&d, vertices[2 * vi] + dim[0],
                           vertices[2 * vi + 1] + dim[1]);
       ++i;
+      if (i == nvert) break;
       vi = sortxyp[i];
     }
     /* add ghosts for the negative x=y diagonal (bottom left) corner */
@@ -447,6 +459,7 @@ int main() {
       delaunay_add_vertex(&d, vertices[2 * vi] - dim[0],
                           vertices[2 * vi + 1] - dim[1]);
       --i;
+      if (i == -1) break;
       vi = sortxyp[i];
     }
     /* add ghosts for the positive x=-y diagonal (bottom right) corner */
@@ -456,6 +469,7 @@ int main() {
       delaunay_add_vertex(&d, vertices[2 * vi] + dim[0],
                           vertices[2 * vi + 1] - dim[1]);
       ++i;
+      if (i == nvert) break;
       vi = sortxym[i];
     }
     /* add ghosts for the negative x=-y diagonal (top left) corner */
@@ -465,6 +479,7 @@ int main() {
       delaunay_add_vertex(&d, vertices[2 * vi] - dim[0],
                           vertices[2 * vi + 1] + dim[1]);
       --i;
+      if (i == -1) break;
       vi = sortxym[i];
     }
     /* update the search radii for all triangles in the tessellation and count
@@ -489,15 +504,19 @@ int main() {
         delaunay_add_vertex(&d, vertices[2 * vi] + dim[0],
                             vertices[2 * vi + 1]);
         ++i;
+        if (i == nvert) break;
         vi = sortx[i];
       }
       i = nvert - 1;
       vi = sortx[i];
       while ((dim[0] - vertices[2 * vi] >= old_r) &&
              (dim[0] - vertices[2 * vi] < r)) {
+        delaunay_log("x: %g, old_r: %g, r: %g", dim[0] - vertices[2 * vi],
+                     old_r, r);
         delaunay_add_vertex(&d, vertices[2 * vi] - dim[0],
                             vertices[2 * vi + 1]);
         --i;
+        if (i == -1) break;
         vi = sortx[i];
       }
       i = 0;
@@ -506,6 +525,7 @@ int main() {
         delaunay_add_vertex(&d, vertices[2 * vi],
                             vertices[2 * vi + 1] + dim[1]);
         ++i;
+        if (i == nvert) break;
         vi = sorty[i];
       }
       i = nvert - 1;
@@ -515,6 +535,7 @@ int main() {
         delaunay_add_vertex(&d, vertices[2 * vi],
                             vertices[2 * vi + 1] - dim[1]);
         --i;
+        if (i == -1) break;
         vi = sorty[i];
       }
       i = 0;
@@ -524,6 +545,7 @@ int main() {
         delaunay_add_vertex(&d, vertices[2 * vi] + dim[0],
                             vertices[2 * vi + 1] + dim[1]);
         ++i;
+        if (i == nvert) break;
         vi = sortxyp[i];
       }
       i = nvert - 1;
@@ -534,6 +556,7 @@ int main() {
         delaunay_add_vertex(&d, vertices[2 * vi] - dim[0],
                             vertices[2 * vi + 1] - dim[1]);
         --i;
+        if (i == -1) break;
         vi = sortxyp[i];
       }
       i = 0;
@@ -543,6 +566,7 @@ int main() {
         delaunay_add_vertex(&d, vertices[2 * vi] + dim[0],
                             vertices[2 * vi + 1] - dim[1]);
         ++i;
+        if (i == nvert) break;
         vi = sortxym[i];
       }
       i = nvert - 1;
@@ -552,6 +576,7 @@ int main() {
         delaunay_add_vertex(&d, vertices[2 * vi] - dim[0],
                             vertices[2 * vi + 1] + dim[1]);
         --i;
+        if (i == -1) break;
         vi = sortxym[i];
       }
       /* update the search radii to the new value and count the number of larger
@@ -579,6 +604,8 @@ int main() {
     /* Now print the Voronoi grid for visual inspection. */
     sprintf(filename, "vtest%03i.txt", loop);
     voronoi_print_grid(&v, filename);
+
+    return 0;
 
     /* apply Lloyd's algorithm to regularise the grid */
     for (int i = 0; i < nvert; ++i) {

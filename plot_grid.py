@@ -8,23 +8,24 @@ import matplotlib.pyplot as pl
 import argparse
 
 argparser = argparse.ArgumentParser()
+argparser.add_argument("--file", "-f", action="store", required=True)
 argparser.add_argument("--zoom", "-z", action="store_true")
 args = argparser.parse_args()
 
 gs = np.fromregex(
-    "vtest.txt", "G\s+(\S+)\s+(\S+)", [("x", np.float64), ("y", np.float64)]
+    args.file, "G\s+(\S+)\s+(\S+)", [("x", np.float64), ("y", np.float64)]
 )
 ms = np.fromregex(
-    "vtest.txt", "M\s+(\S+)\s+(\S+)", [("x", np.float64), ("y", np.float64)]
+    args.file, "M\s+(\S+)\s+(\S+)", [("x", np.float64), ("y", np.float64)]
 )
 fs = np.fromregex(
-    "vtest.txt", "F\s+(\S+)\s+(\S+)", [("x", np.float64), ("y", np.float64)]
+    args.file, "F\s+(\S+)\s+(\S+)", [("x", np.float64), ("y", np.float64)]
 )
 vs = np.fromregex(
-    "vtest.txt", "V\s+(\S+)\s+(\S+)", [("x", np.float64), ("y", np.float64)]
+    args.file, "V\s+(\S+)\s+(\S+)", [("x", np.float64), ("y", np.float64)]
 )
 cs = np.fromregex(
-    "vtest.txt", "C\s+(\d+)\s+(\d+)", [("v0", np.int32), ("v1", np.int32)]
+    args.file, "C\s+(\d+)\s+(\d+)", [("v0", np.int32), ("v1", np.int32)]
 )
 
 print(gs.shape, vs.shape)
