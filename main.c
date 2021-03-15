@@ -280,13 +280,15 @@ int main() {
 
   /* dimensions of the simulation box. We purposefully use large numbers to
      make sure the internal conversion routines are properly tested. */
-  /*  double dim[3] = {1.e10, 1.e10, 1.e10};*/
-  double dim[3] = {1., 1., 1.};
+  double dim[3] = {1.e10, 1.e10, 1.e10};
+//  double dim[3] = {1., 1., 1.};
 
   /* define the number of vertices and set up the vertex array. */
-  const int nvert = 64;
+  const int nvert = 400;
+//  const int nvert = 64;
   double *vertices = (double *)malloc(2 * nvert * sizeof(double));
 
+#define REGULAR_GRID
 #ifndef REGULAR_GRID
   FILE *ifile = fopen("generators-241.txt", "r");
   for (int i = 0; i < nvert; ++i) {
