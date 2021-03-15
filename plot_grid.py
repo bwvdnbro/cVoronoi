@@ -2,6 +2,7 @@
 
 import numpy as np
 import matplotlib
+from pathlib import Path
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as pl
@@ -59,4 +60,4 @@ if args.zoom:
     pl.ylim(0.0, 1.0e10)
 pl.gca().set_aspect("equal")
 # pl.show()
-pl.savefig("vtest.png", dpi=300)
+pl.savefig((Path(args.file)).parent / "vtest.png", dpi=300)
