@@ -25,8 +25,8 @@
  * @author Bert Vandenbroucke (bert.vandenbroucke@ugent.be)
  */
 
-#ifndef SWIFT_VORONOI_H
-#define SWIFT_VORONOI_H
+#ifndef CVORONOI_VORONOI2D_H
+#define CVORONOI_VORONOI2D_H
 
 #include <string.h>
 
@@ -410,4 +410,4 @@ static inline void voronoi_print_grid(const struct voronoi *restrict v,
   fclose(file);
 }
 
-#endif /* SWIFT_VORONOI_H */
+#endif /* CVORONOI_VORONOI2D_H */

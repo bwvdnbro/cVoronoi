@@ -25,8 +25,8 @@
  * @author Bert Vandenbroucke (bert.vandenbroucke@ugent.be)
  */
 
-#ifndef SWIFT_DELAUNAY_H
-#define SWIFT_DELAUNAY_H
+#ifndef CVORONOI_DELAUNAY2D_H
+#define CVORONOI_DELAUNAY2D_H
 
 #include <float.h>
 #include <math.h>
@@ -231,6 +231,46 @@ static inline unsigned long int delaunay_double_to_int(double d) {
   return (u.ull & 0xFFFFFFFFFFFFFllu);
 }
 
+inline static void delaunay_init_vertex(struct delaunay* restrict d,
+                                        const int v, double x, double y) {
+  /* store a copy of the vertex coordinates (we should get rid of this for
+     SWIFT) */
+  d->vertices[2 * v] = x;
+  d->vertices[2 * v + 1] = y;
+
+  /* compute the rescaled coordinates. We do this because floating point values
+     in the range [1,2[ all have the same exponent (0), which guarantees that
+     their mantissas form a linear sequence */
+  double rescaled_x = 1. + (x - d->anchor[0]) * d->inverse_side;
+  double rescaled_y = 1. + (y - d->anchor[1]) * d->inverse_side;
+
+  delaunay_assert(rescaled_x >= 1.);
+  delaunay_assert(rescaled_x < 2.);
+  delaunay_assert(rescaled_y >= 1.);
+  delaunay_assert(rescaled_y < 2.);
+
+#ifdef DELAUNAY_NONEXACT
+  /* store a copy of the rescaled coordinates to apply non-exact tests */
+  d->rescaled_vertices[2 * d->vertex_index] = rescaled_x;
+  d->rescaled_vertices[2 * d->vertex_index + 1] = rescaled_y;
+#endif
+
+  /* convert the rescaled coordinates to integer coordinates and store these */
+  d->integer_vertices[2 * v] = delaunay_double_to_int(rescaled_x);
+  d->integer_vertices[2 * v + 1] = delaunay_double_to_int(rescaled_y);
+
+  /* initialise the variables that keep track of the link between vertices and
+     triangles.
+     We use negative values so that we can later detect missing links. */
+  d->vertex_triangles[v] = -1;
+  d->vertex_triangle_index[v] = -1;
+
+  /* initialise the search radii to the largest possible value */
+  d->search_radii[v] = DBL_MAX;
+
+  delaunay_log("Initialized new vertex with index %i", d->vertex_index);
+}
+
 /**
  * @brief Add a new vertex with the given coordinates.
  *
@@ -268,41 +308,7 @@ inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
         (double*)realloc(d->search_radii, d->vertex_size * sizeof(double));
   }
 
-  /* store a copy of the vertex coordinates (we should get rid of this for
-     SWIFT) */
-  d->vertices[2 * d->vertex_index] = x;
-  d->vertices[2 * d->vertex_index + 1] = y;
-
-  /* compute the rescaled coordinates. We do this because floating point values
-     in the range [1,2[ all have the same exponent (0), which guarantees that
-     their mantissas form a linear sequence */
-  double rescaled_x = 1. + (x - d->anchor[0]) * d->inverse_side;
-  double rescaled_y = 1. + (y - d->anchor[1]) * d->inverse_side;
-
-  delaunay_assert(rescaled_x >= 1.);
-  delaunay_assert(rescaled_x < 2.);
-  delaunay_assert(rescaled_y >= 1.);
-  delaunay_assert(rescaled_y < 2.);
-
-#ifdef DELAUNAY_NONEXACT
-  /* store a copy of the rescaled coordinates to apply non-exact tests */
-  d->rescaled_vertices[2 * d->vertex_index] = rescaled_x;
-  d->rescaled_vertices[2 * d->vertex_index + 1] = rescaled_y;
-#endif
-
-  /* convert the rescaled coordinates to integer coordinates and store these */
-  d->integer_vertices[2 * d->vertex_index] = delaunay_double_to_int(rescaled_x);
-  d->integer_vertices[2 * d->vertex_index + 1] =
-      delaunay_double_to_int(rescaled_y);
-
-  /* initialise the variables that keep track of the link between vertices and
-     triangles.
-     We use negative values so that we can later detect missing links. */
-  d->vertex_triangles[d->vertex_index] = -1;
-  d->vertex_triangle_index[d->vertex_index] = -1;
-
-  /* initialise the search radii to the largest possible value */
-  d->search_radii[d->vertex_index] = DBL_MAX;
+  delaunay_init_vertex(d, d->vertex_index, x, y);
 
   /* return the vertex index and then increase it by 1.
      After this operation, vertex_index will correspond to the size of the
@@ -535,8 +541,14 @@ inline static void delaunay_init(struct delaunay* restrict d,
   d->vertex_triangles = (int*)malloc(vertex_size * sizeof(int));
   d->vertex_triangle_index = (int*)malloc(vertex_size * sizeof(int));
   d->search_radii = (double*)malloc(vertex_size * sizeof(double));
-  d->vertex_index = 0;
   d->vertex_size = vertex_size;
+  /* set vertex start and end (indicating where the local vertices start and
+   * end)*/
+  d->vertex_start = 0;
+  d->vertex_end = vertex_size;
+  /* we add the dummy vertices behind the local vertices and before the ghost
+   * vertices (see below) */
+  d->vertex_index = vertex_size;
 
   /* allocate memory for the triangle array */
   d->triangles =
@@ -615,127 +627,9 @@ inline static void delaunay_init(struct delaunay* restrict d,
 
   d->last_triangle = first_triangle;
 
-  d->vertex_start = d->vertex_index;
-  /* initialise the last vertex index to a negative value to signal that the
-     Delaunay tessellation was not consolidated yet.
-     delaunay_update_search_radii() will not work until delaunay_consolidate()
-     was called. Neither will it be possible to convert the Delaunay
-     tessellation into a Voronoi grid before this happens. */
-  d->vertex_end = -1;
-
   /* Perform potential log output and sanity checks */
   delaunay_log("Post init check");
-  delaunay_check_tessellation(d);
-}
-
-/**
- * @brief Free up all memory associated with the Delaunay tessellation.
- *
- * @param d Delaunay tessellation.
- */
-inline static void delaunay_destroy(struct delaunay* restrict d) {
-  free(d->vertices);
-#ifdef DELAUNAY_NONEXACT
-  free(d->rescaled_vertices);
-#endif
-  free(d->integer_vertices);
-  free(d->vertex_triangles);
-  free(d->vertex_triangle_index);
-  free(d->search_radii);
-  free(d->triangles);
-  free(d->queue);
-  geometry_destroy(&d->geometry);
-}
-
-/**
- * @brief Get the radius of the circumcircle of the given triangle.
- *
- * @param d Delaunay tessellation.
- * @param t Triangle index.
- * @return Radius of the circumcircle of the triangle.
- */
-inline static double delaunay_get_radius(const struct delaunay* restrict d,
-                                         int t) {
-  int v0 = d->triangles[t].vertices[0];
-  int v1 = d->triangles[t].vertices[1];
-  int v2 = d->triangles[t].vertices[2];
-
-  double v0x = d->vertices[2 * v0];
-  double v0y = d->vertices[2 * v0 + 1];
-  double v1x = d->vertices[2 * v1];
-  double v1y = d->vertices[2 * v1 + 1];
-  double v2x = d->vertices[2 * v2];
-  double v2y = d->vertices[2 * v2 + 1];
-
-  double ax = v1x - v0x;
-  double ay = v1y - v0y;
-  double bx = v2x - v0x;
-  double by = v2y - v0y;
-
-  double D = 2. * (ax * by - ay * bx);
-  double a2 = ax * ax + ay * ay;
-  double b2 = bx * bx + by * by;
-  double Rx = (by * a2 - ay * b2) / D;
-  double Ry = (ax * b2 - bx * a2) / D;
-
-  return sqrt(Rx * Rx + Ry * Ry);
-}
-
-/**
- * @brief Consolidate the Delaunay tessellation. This signals the end of the
- * addition of normal vertices. All vertices added after this point are
- * considered to be ghost vertices.
- *
- * This function will also enable running delaunay_update_search_radii() and
- * will make it possible to construct a Voronoi grid based on the tessellation.
- *
- * @param d Delaunay tessellation.
- */
-inline static void delaunay_consolidate(struct delaunay* restrict d) {
-  d->vertex_end = d->vertex_index;
-}
-
-/**
- * @brief Update the search radii of all vertices based on the given radius.
- *
- * If the current search radius of a vertex is larger than the given value,
- * the search radius is recomputed based on all the triangles that vertex is
- * part of (and set to twice the largest circumcircle radius among those
- * triangles). This function also counts the vertices for which this updated
- * radius is still larger than the given radius.
- *
- * This function is meant to be called after all ghost vertices with a distance
- * smaller than the given radius to all of the vertices have been added to the
- * tessellation.
- *
- * @param d Delaunay tessellation.
- * @param r Radius.
- * @return Number of vertices with a search radius larger than the given radius.
- */
-inline static int delaunay_update_search_radii(struct delaunay* restrict d,
-                                               double r) {
-  int count = 0;
-  for (int i = d->vertex_start; i < d->vertex_end; ++i) {
-    if (d->search_radii[i] > r) {
-      int t0 = d->vertex_triangles[i];
-      int vi0 = d->vertex_triangle_index[i];
-      int vi0p1 = (vi0 + 1) % 3;
-      d->search_radii[i] = 2. * delaunay_get_radius(d, t0);
-      int t1 = d->triangles[t0].neighbours[vi0p1];
-      int vi1 = d->triangles[t0].index_in_neighbour[vi0p1];
-      while (t1 != t0) {
-        d->search_radii[i] =
-            fmax(d->search_radii[i], 2. * delaunay_get_radius(d, t1));
-        int vi1p2 = (vi1 + 2) % 3;
-        vi1 = d->triangles[t1].index_in_neighbour[vi1p2];
-        t1 = d->triangles[t1].neighbours[vi1p2];
-      }
-      if (d->search_radii[i] > r) {
-        ++count;
-      }
-    }
-  }
-  return count;
+//  delaunay_check_tessellation(d);
 }
 
 /**
@@ -1151,8 +1045,7 @@ inline static void delaunay_check_triangles(struct delaunay* restrict d) {
 /**
  * @brief Add a new vertex to the tessellation.
  *
- * This function first adds the vertex to the internal list, computing its
- * rescaled (integer) coordinates. It then locates the triangle in the current
+ * This function locates the triangle in the current
  * tessellation that contains the new vertex. This triangle is split into 3 new
  * triangles by combining the 3 edges of the original triangle with the new
  * vertex. If the new vertex degenerately lies on the edge between two existing
@@ -1167,17 +1060,9 @@ inline static void delaunay_check_triangles(struct delaunay* restrict d) {
  * vertex should always be the final vertex of any newly created triangle.
  *
  * @param d Delaunay tessellation.
- * @param x Horizontal coordinate of the new vertex.
- * @param y Vertical coordinate of the new vertex.
+ * @param v Index of new vertex
  */
-inline static void delaunay_add_vertex_func(struct delaunay* restrict d,
-                                            double x, double y) {
-
-  delaunay_log("Adding vertex with position %g %g", x, y);
-
-  /* create the new vertex */
-  int v = delaunay_new_vertex(d, x, y);
-  delaunay_log("Created new vertex with index %i", v);
+inline static void delaunay_add_vertex(struct delaunay* restrict d, int v) {
 
   /* find the triangle that contains the new vertex. Starting from an initial
      guess (the last triangle accessed by the previous insertion), we test if
@@ -1363,14 +1248,133 @@ inline static void delaunay_add_vertex_func(struct delaunay* restrict d,
   /* now process all triangles in the test queue */
   delaunay_check_triangles(d);
   delaunay_log("Post vertex %i check", v);
+}
+
+inline static void delaunay_add_local_vertex(struct delaunay* restrict d, int v,
+                                             double x, double y) {
+  delaunay_assert(v < d->vertex_end && d->vertex_start <= v);
+  delaunay_init_vertex(d, v, x, y);
+  delaunay_log("Adding local vertex with position %g %g", x, y);
+  delaunay_add_vertex(d, v);
+}
+
+inline static void delaunay_add_new_vertex(struct delaunay* restrict d,
+                                           double x, double y) {
+  int v = delaunay_new_vertex(d, x, y);
+  delaunay_log("Created new vertex with position %g %g", x, y);
+  delaunay_add_vertex(d, v);
+}
+
+/**
+ * @brief Free up all memory associated with the Delaunay tessellation.
+ *
+ * @param d Delaunay tessellation.
+ */
+inline static void delaunay_destroy(struct delaunay* restrict d) {
+  free(d->vertices);
+#ifdef DELAUNAY_NONEXACT
+  free(d->rescaled_vertices);
+#endif
+  free(d->integer_vertices);
+  free(d->vertex_triangles);
+  free(d->vertex_triangle_index);
+  free(d->search_radii);
+  free(d->triangles);
+  free(d->queue);
+  geometry_destroy(&d->geometry);
+}
+
+/**
+ * @brief Get the radius of the circumcircle of the given triangle.
+ *
+ * @param d Delaunay tessellation.
+ * @param t Triangle index.
+ * @return Radius of the circumcircle of the triangle.
+ */
+inline static double delaunay_get_radius(const struct delaunay* restrict d,
+                                         int t) {
+  int v0 = d->triangles[t].vertices[0];
+  int v1 = d->triangles[t].vertices[1];
+  int v2 = d->triangles[t].vertices[2];
+
+  double v0x = d->vertices[2 * v0];
+  double v0y = d->vertices[2 * v0 + 1];
+  double v1x = d->vertices[2 * v1];
+  double v1y = d->vertices[2 * v1 + 1];
+  double v2x = d->vertices[2 * v2];
+  double v2y = d->vertices[2 * v2 + 1];
+
+  double ax = v1x - v0x;
+  double ay = v1y - v0y;
+  double bx = v2x - v0x;
+  double by = v2y - v0y;
+
+  double D = 2. * (ax * by - ay * bx);
+  double a2 = ax * ax + ay * ay;
+  double b2 = bx * bx + by * by;
+  double Rx = (by * a2 - ay * b2) / D;
+  double Ry = (ax * b2 - bx * a2) / D;
+
+  return sqrt(Rx * Rx + Ry * Ry);
+}
+
+/**
+ * @brief Consolidate the Delaunay tessellation. This signals the end of the
+ * addition of normal vertices. All vertices added after this point are
+ * considered to be ghost vertices.
+ *
+ * This function will also enable running delaunay_update_search_radii() and
+ * will make it possible to construct a Voronoi grid based on the tessellation.
+ *
+ * @param d Delaunay tessellation.
+ */
+inline static void delaunay_consolidate(struct delaunay* restrict d) {
   /* perform a consistency test if enabled */
   delaunay_check_tessellation(d);
 }
 
-#define delaunay_add_vertex(d, x, y)                                           \
-  fprintf(stderr, "%s:%s():%i: adding vertex %g %g\n", __FILE__, __FUNCTION__, \
-          __LINE__, x, y);                                                     \
-  delaunay_add_vertex_func(d, x, y);
+/**
+ * @brief Update the search radii of all vertices based on the given radius.
+ *
+ * If the current search radius of a vertex is larger than the given value,
+ * the search radius is recomputed based on all the triangles that vertex is
+ * part of (and set to twice the largest circumcircle radius among those
+ * triangles). This function also counts the vertices for which this updated
+ * radius is still larger than the given radius.
+ *
+ * This function is meant to be called after all ghost vertices with a distance
+ * smaller than the given radius to all of the vertices have been added to the
+ * tessellation.
+ *
+ * @param d Delaunay tessellation.
+ * @param r Radius.
+ * @return Number of vertices with a search radius larger than the given radius.
+ */
+inline static int delaunay_update_search_radii(struct delaunay* restrict d,
+                                               double r) {
+  int count = 0;
+  for (int i = d->vertex_start; i < d->vertex_end; ++i) {
+    if (d->search_radii[i] > r) {
+      int t0 = d->vertex_triangles[i];
+      int vi0 = d->vertex_triangle_index[i];
+      int vi0p1 = (vi0 + 1) % 3;
+      d->search_radii[i] = 2. * delaunay_get_radius(d, t0);
+      int t1 = d->triangles[t0].neighbours[vi0p1];
+      int vi1 = d->triangles[t0].index_in_neighbour[vi0p1];
+      while (t1 != t0) {
+        d->search_radii[i] =
+            fmax(d->search_radii[i], 2. * delaunay_get_radius(d, t1));
+        int vi1p2 = (vi1 + 2) % 3;
+        vi1 = d->triangles[t1].index_in_neighbour[vi1p2];
+        t1 = d->triangles[t1].neighbours[vi1p2];
+      }
+      if (d->search_radii[i] > r) {
+        ++count;
+      }
+    }
+  }
+  return count;
+}
 
 /**
  * @brief Output the tessellation to a text file with the given name.
@@ -1404,4 +1408,4 @@ inline static void delaunay_print_tessellation(
   fclose(file);
 }
 
-#endif /* SWIFT_DELAUNAY_H */
+#endif /* CVORONOI_DELAUNAY2D_H */

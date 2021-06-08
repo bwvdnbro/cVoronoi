@@ -8,11 +8,11 @@
 #include <float.h>
 
 #include "delaunay.h"
-#include "voronoi.h"
+#include "dimensionality.h"
 #include "hilbert.h"
 #include "hydro_space.h"
 #include "sort.h"
-#include "dimensionality.h"
+#include "voronoi.h"
 
 /**
  * @brief Generate a random uniform double in the range [0, 1].
@@ -106,8 +106,8 @@ static inline void cell_update_sorts(struct cell *c) {
  * @param pert Relative scale of the perturbations
  * @param dim Dimensions of the simulation volume
  */
-static inline void cell_init(struct cell *c, const int *count, const double pert,
-               const double *dim) {
+static inline void cell_init(struct cell *c, const int *count,
+                             const double pert, const double *dim) {
   hydro_space_init(&c->hs, dim);
   c->count = count[0] * count[1] * count[2];
 
@@ -176,7 +176,8 @@ static inline void cell_construct_local_delaunay(struct cell *c) {
   /* Add the local vertices, one by one, in Hilbert order. */
   for (int i = 0; i < c->count; ++i) {
     int j = c->r_sort_lists[4][i];
-    delaunay_add_vertex(&c->d, c->vertices[3 * j], c->vertices[3 * j + 1]);
+    delaunay_add_local_vertex(&c->d, j, c->vertices[3 * j],
+                              c->vertices[3 * j + 1]);
   }
 
   /* we are done adding the original vertices. We need to consolidate the
@@ -227,9 +228,9 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
         vi = c->r_sort_lists[0][i];
         continue;
       }
-      delaunay_add_vertex(&c->d,
-                          c->vertices[3 * vi] + c->hs.anchor[0] + c->hs.side[0],
-                          c->vertices[3 * vi + 1]);
+      delaunay_add_new_vertex(
+          &c->d, c->vertices[3 * vi] + c->hs.anchor[0] + c->hs.side[0],
+          c->vertices[3 * vi + 1]);
       vi = c->r_sort_lists[0][i];
     }
     /* add ghosts for the negative horizontal boundary */
@@ -245,7 +246,7 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
       delaunay_log("x: %g, old_r: %g, r: %g",
                    c->hs.anchor[0] + c->hs.side[0] - c->vertices[3 * vi], old_r,
                    r);
-      delaunay_add_vertex(
+      delaunay_add_new_vertex(
           &c->d, c->vertices[3 * vi] - (c->hs.anchor[0] + c->hs.side[0]),
           c->vertices[3 * vi + 1]);
       vi = c->r_sort_lists[0][i];
@@ -260,7 +261,7 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
         vi = c->r_sort_lists[1][i];
         continue;
       }
-      delaunay_add_vertex(
+      delaunay_add_new_vertex(
           &c->d, c->vertices[3 * vi],
           c->vertices[3 * vi + 1] + c->hs.anchor[1] + c->hs.side[1]);
       vi = c->r_sort_lists[1][i];
@@ -275,7 +276,7 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
         vi = c->r_sort_lists[1][i];
         continue;
       }
-      delaunay_add_vertex(
+      delaunay_add_new_vertex(
           &c->d, c->vertices[3 * vi],
           c->vertices[3 * vi + 1] - (c->hs.anchor[1] + c->hs.side[1]));
       vi = c->r_sort_lists[1][i];
@@ -290,7 +291,7 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
         vi = c->r_sort_lists[2][i];
         continue;
       }
-      delaunay_add_vertex(
+      delaunay_add_new_vertex(
           &c->d, c->vertices[3 * vi] + c->hs.anchor[0] + c->hs.side[0],
           c->vertices[3 * vi + 1] + c->hs.anchor[1] + c->hs.side[1]);
       vi = c->r_sort_lists[2][i];
@@ -309,7 +310,7 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
         vi = c->r_sort_lists[2][i];
         continue;
       }
-      delaunay_add_vertex(
+      delaunay_add_new_vertex(
           &c->d, c->vertices[3 * vi] - (c->hs.anchor[0] + c->hs.side[0]),
           c->vertices[3 * vi + 1] - (c->hs.anchor[1] + c->hs.side[1]));
       vi = c->r_sort_lists[2][i];
@@ -328,7 +329,7 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
         vi = c->r_sort_lists[3][i];
         continue;
       }
-      delaunay_add_vertex(
+      delaunay_add_new_vertex(
           &c->d, c->vertices[3 * vi] + c->hs.anchor[0] + c->hs.side[0],
           c->vertices[3 * vi + 1] - (c->hs.anchor[1] + c->hs.side[1]));
       vi = c->r_sort_lists[3][i];
@@ -347,7 +348,7 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
         vi = c->r_sort_lists[3][i];
         continue;
       }
-      delaunay_add_vertex(
+      delaunay_add_new_vertex(
           &c->d, c->vertices[3 * vi] - (c->hs.anchor[0] + c->hs.side[0]),
           c->vertices[3 * vi + 1] + c->hs.anchor[1] + c->hs.side[1]);
       vi = c->r_sort_lists[3][i];
@@ -422,8 +423,9 @@ static inline void cell_lloyd_relax_vertices(struct cell *c) {
  * @param vor_file_name Filename to write the voronoi tessellation to
  * @param del_file_name Filename to write the delaunay tessellation to
  */
-static inline void cell_print_tesselations(const struct cell *c, const char *vor_file_name,
-                             const char *del_file_name) {
+static inline void cell_print_tesselations(const struct cell *c,
+                                           const char *vor_file_name,
+                                           const char *del_file_name) {
   if (!c->voronoi_active) {
     fprintf(stderr, "Voronoi tesselation is uninitialized!\n");
     abort();
