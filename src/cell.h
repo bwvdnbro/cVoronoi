@@ -44,7 +44,7 @@ struct cell {
   int voronoi_active;
 };
 
-void cell_update_hilbert_keys(struct cell *c) {
+static inline void cell_update_hilbert_keys(struct cell *c) {
   for (int i = 0; i < c->count; i++) {
 #if defined(DIMENSIONALITY_2D)
     unsigned long bits[2];
@@ -67,7 +67,7 @@ void cell_update_hilbert_keys(struct cell *c) {
   }
 }
 
-void cell_update_sorts(struct cell *c) {
+static inline void cell_update_sorts(struct cell *c) {
   qsort_r(c->r_sort_lists[0], c->count, sizeof(int), sort_x_comp, c->vertices);
   qsort_r(c->r_sort_lists[1], c->count, sizeof(int), sort_y_comp, c->vertices);
   qsort_r(c->r_sort_lists[2], c->count, sizeof(int), sort_xyp_comp,
@@ -77,7 +77,7 @@ void cell_update_sorts(struct cell *c) {
   qsort_r(c->r_sort_lists[4], c->count, sizeof(int), sort_h_comp, c->vertices);
 }
 
-void cell_init(struct cell *c, const int *count, const double pert,
+static inline void cell_init(struct cell *c, const int *count, const double pert,
                const double *dim) {
   hydro_space_init(&c->hs, dim);
   c->count = count[0] * count[1] * count[2];
@@ -121,7 +121,7 @@ void cell_init(struct cell *c, const int *count, const double pert,
   c->voronoi_active = 0;
 }
 
-void cell_destroy(struct cell *c) {
+static inline void cell_destroy(struct cell *c) {
   free(c->vertices);
   free(c->hilbert_keys);
   for (int i = 0; i < 5; i++) {
@@ -133,7 +133,7 @@ void cell_destroy(struct cell *c) {
   }
 }
 
-void cell_construct_local_delaunay(struct cell *c) {
+static inline void cell_construct_local_delaunay(struct cell *c) {
   /* Add the local vertices, one by one, in Hilbert order. */
   for (int i = 0; i < c->count; ++i) {
     int j = c->r_sort_lists[4][i];
@@ -147,7 +147,8 @@ void cell_construct_local_delaunay(struct cell *c) {
   delaunay_consolidate(&c->d);
 }
 
-void cell_make_delaunay_periodic(struct cell *c) {
+static inline void cell_make_delaunay_periodic(struct cell *c) {
+#ifdef DIMENSIONALITY_2D
   /* Add ghosts to impose the periodic boundaries. These ghosts will be
      periodic copies of the original vertices that ensure that the incomplete
      cells at the boundaries of the simulation box have the right shape.
@@ -321,14 +322,17 @@ void cell_make_delaunay_periodic(struct cell *c) {
     /* now gradually increase the search radius and repeat */
     r *= 1.25;
   }
+#else
+#endif
 }
 
-void cell_construct_voronoi(struct cell *c) {
+
+static inline void cell_construct_voronoi(struct cell *c) {
   c->voronoi_active = 1;
   voronoi_init(&c->v, &c->d);
 }
 
-void cell_lloyd_relax_vertices(struct cell *c) {
+static inline void cell_lloyd_relax_vertices(struct cell *c) {
   if (!c->voronoi_active) {
     fprintf(stderr, "Voronoi tesselation is uninitialized!\n");
     abort();
@@ -358,7 +362,7 @@ void cell_lloyd_relax_vertices(struct cell *c) {
   cell_construct_voronoi(c);
 }
 
-void cell_print_tesselations(const struct cell *c, const char *vor_file_name,
+static inline void cell_print_tesselations(const struct cell *c, const char *vor_file_name,
                              const char *del_file_name) {
   if (!c->voronoi_active) {
     fprintf(stderr, "Voronoi tesselation is uninitialized!\n");
