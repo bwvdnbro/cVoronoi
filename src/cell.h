@@ -3,6 +3,7 @@
 //
 
 #ifndef CVORONOI_CELL_H
+#define CVORONOI_CELL_H
 
 #include <float.h>
 
@@ -26,24 +27,41 @@ static inline double get_random_uniform_double() {
   return ((double)rand()) / ((double)RAND_MAX);
 }
 
+/*! @brief Struct containing the necessary information to build a delaunay and
+ * vornonoi tesselation for a given set of vertices.
+ */
 struct cell {
+  /*! @brief Number of vertices in cell */
   int count;
 
+  /*! @brief Array of vertices */
   double *vertices;
 
+  /*! @brief Array of hilbert keys of vertices */
   unsigned long *hilbert_keys;
 
-  /* Arg-sort indices for directions: x, y, xyp and xym and the hilbert key */
+  /*! @brief Arg-sort indices for directions: x, y, xyp and xym and the hilbert
+   * key */
   int *r_sort_lists[5];
 
+  /*! @brief Simulation volume */
   struct hydro_space hs;
 
+  /*! @brief Delaunay triangulation, empty upon initialization */
   struct delaunay d;
 
+  /*! @brief Voronoi tesselation, empty upon initialization */
   struct voronoi v;
+
+  /*! @brief Flag indication whether or not the current cell has already
+   * constructed its voronoi tesselation */
   int voronoi_active;
 };
 
+/*! @brief Calculate the hilbert keys of the vertices
+ *
+ * @param c Cell containing the vertices
+ */
 static inline void cell_update_hilbert_keys(struct cell *c) {
   for (int i = 0; i < c->count; i++) {
 #if defined(DIMENSIONALITY_2D)
@@ -67,6 +85,10 @@ static inline void cell_update_hilbert_keys(struct cell *c) {
   }
 }
 
+/*! @brief Update the arg-sort arrays in the various directions
+ *
+ * @param c Cell containing the vertices to be sorted.
+ */
 static inline void cell_update_sorts(struct cell *c) {
   qsort_r(c->r_sort_lists[0], c->count, sizeof(int), sort_x_comp, c->vertices);
   qsort_r(c->r_sort_lists[1], c->count, sizeof(int), sort_y_comp, c->vertices);
@@ -77,6 +99,13 @@ static inline void cell_update_sorts(struct cell *c) {
   qsort_r(c->r_sort_lists[4], c->count, sizeof(int), sort_h_comp, c->vertices);
 }
 
+/*! @brief Initialize a new cell with slightly randomized vertices
+ *
+ * @param c Pointer to cell to be initialized
+ * @param count Number of vertices to add to cell
+ * @param pert Relative scale of the perturbations
+ * @param dim Dimensions of the simulation volume
+ */
 static inline void cell_init(struct cell *c, const int *count, const double pert,
                const double *dim) {
   hydro_space_init(&c->hs, dim);
@@ -121,6 +150,10 @@ static inline void cell_init(struct cell *c, const int *count, const double pert
   c->voronoi_active = 0;
 }
 
+/*! @brief Clean up cell
+ *
+ * @param c pointer to cell to be freed
+ */
 static inline void cell_destroy(struct cell *c) {
   free(c->vertices);
   free(c->hilbert_keys);
@@ -133,6 +166,12 @@ static inline void cell_destroy(struct cell *c) {
   }
 }
 
+/*! @brief Construct the delaunay triangulation of all the local vertices (no
+ * periodic boundaries).
+ *
+ * @param c Pointer to cell containing the vertices to add to the delaunay
+ * triangulation.
+ */
 static inline void cell_construct_local_delaunay(struct cell *c) {
   /* Add the local vertices, one by one, in Hilbert order. */
   for (int i = 0; i < c->count; ++i) {
@@ -147,21 +186,25 @@ static inline void cell_construct_local_delaunay(struct cell *c) {
   delaunay_consolidate(&c->d);
 }
 
+/*! @brief Impose periodic boundaries by adding the necessary ghost vertices
+ *
+ * Add ghosts to impose the periodic boundaries. These ghosts will be
+ * periodic copies of the original vertices that ensure that the incomplete
+ * cells at the boundaries of the simulation box have the right shape.
+ * Within SWIFT, a similar technique needs to be used to guarantee that
+ * cells near the boundary of a SWIFT-cell correctly "feel" the cells in the
+ * neighbouring SWIFT-cells. Springel (2010) provides a criterion for
+ * completeness, which is based on the radius of the circumcircles of the
+ * triangles that connect to original vertices. Starting from an initial
+ * search radius, we will iteratively add ghost vertices and increase this
+ * search radius until all relevant circumcircle radii are smaller than the
+ * search radius. This mechanism can very easily be combined with SWIFT's
+ * existing neighbour search algorithms.
+
+ * @param c Cell containing the consolidated delaunay triangulation.
+ */
 static inline void cell_make_delaunay_periodic(struct cell *c) {
 #ifdef DIMENSIONALITY_2D
-  /* Add ghosts to impose the periodic boundaries. These ghosts will be
-     periodic copies of the original vertices that ensure that the incomplete
-     cells at the boundaries of the simulation box have the right shape.
-     Within SWIFT, a similar technique needs to be used to guarantee that
-     cells near the boundary of a SWIFT-cell correctly "feel" the cells in the
-     neighbouring SWIFT-cells. Springel (2010) provides a criterion for
-     completeness, which is based on the radius of the circumcircles of the
-     triangles that connect to original vertices. Starting from an initial
-     search radius, we will iteratively add ghost vertices and increase this
-     search radius until all relevant circumcircle radii are smaller than the
-     search radius. This mechanism can very easily be combined with SWIFT's
-     existing neighbour search algorithms. */
-
   /* Initial search radius. We use twice the average inter-particle
      separation, but other values would also work. */
   double r = 2. * c->hs.side[0] * c->hs.side[1] / c->count;
@@ -326,12 +369,23 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
 #endif
 }
 
-
+/*! @brief Construct the voronoi grid from this cells delaunay triangulation
+ *
+ * @param c The cell containing the delaunay triangulation
+ */
 static inline void cell_construct_voronoi(struct cell *c) {
   c->voronoi_active = 1;
   voronoi_init(&c->v, &c->d);
 }
 
+/*! @brief Relax this cells vertices by moving them to the centroids of their
+ * corresponding voronoi faces (Lloyds relaxation).
+ *
+ * After moving the vertices, the hilbert keys and sort lists are updated and
+ * the tessellations are rebuild.
+ *
+ * @param c The cell containing the voronoi tessellation
+ */
 static inline void cell_lloyd_relax_vertices(struct cell *c) {
   if (!c->voronoi_active) {
     fprintf(stderr, "Voronoi tesselation is uninitialized!\n");
@@ -362,6 +416,12 @@ static inline void cell_lloyd_relax_vertices(struct cell *c) {
   cell_construct_voronoi(c);
 }
 
+/*! @brief Print this cells voronoi and delaunay tessellations
+ *
+ * @param c The cell containing the tessellations
+ * @param vor_file_name Filename to write the voronoi tessellation to
+ * @param del_file_name Filename to write the delaunay tessellation to
+ */
 static inline void cell_print_tesselations(const struct cell *c, const char *vor_file_name,
                              const char *del_file_name) {
   if (!c->voronoi_active) {
@@ -372,7 +432,5 @@ static inline void cell_print_tesselations(const struct cell *c, const char *vor
   voronoi_print_grid(&c->v, vor_file_name);
   delaunay_print_tessellation(&c->d, del_file_name);
 }
-
-#define CVORONOI_CELL_H
 
 #endif  // CVORONOI_CELL_H
