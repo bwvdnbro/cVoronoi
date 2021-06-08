@@ -42,6 +42,27 @@ struct cell {
   int voronoi_active;
 };
 
+void cell_update_hilbert_keys(struct cell *c) {
+  for (int i = 0; i < c->count; i++) {
+    unsigned long bits[2];
+    bits[0] =
+        (c->vertices[2 * i] - c->hs.anchor[0]) / c->hs.side[0] * (1ul << 32);
+    bits[1] = (c->vertices[2 * i + 1] - c->hs.anchor[1]) / c->hs.side[1] *
+              (1ul << 32);
+    c->hilbert_keys[i] = hilbert_get_key_2d(bits, 64);
+  }
+}
+
+void cell_update_sorts(struct cell *c) {
+  qsort_r(c->r_sort_lists[0], c->count, sizeof(int), sort_x_comp, c->vertices);
+  qsort_r(c->r_sort_lists[1], c->count, sizeof(int), sort_y_comp, c->vertices);
+  qsort_r(c->r_sort_lists[2], c->count, sizeof(int), sort_xyp_comp,
+          c->vertices);
+  qsort_r(c->r_sort_lists[3], c->count, sizeof(int), sort_xym_comp,
+          c->vertices);
+  qsort_r(c->r_sort_lists[4], c->count, sizeof(int), sort_h_comp, c->vertices);
+}
+
 void cell_init(struct cell *c, const int *count, const double pert,
                const double *dim) {
   hydro_space_init(&c->hs, dim);
@@ -65,14 +86,7 @@ void cell_init(struct cell *c, const int *count, const double pert,
 
   /* hilbert keys */
   c->hilbert_keys = (unsigned long *)malloc(c->count * sizeof(unsigned long));
-  for (int i = 0; i < c->count; i++) {
-    unsigned long bits[2];
-    bits[0] =
-        (c->vertices[2 * i] - c->hs.anchor[0]) / c->hs.side[0] * (1ul << 32);
-    bits[1] = (c->vertices[2 * i + 1] - c->hs.anchor[1]) / c->hs.side[1] *
-              (1ul << 32);
-    c->hilbert_keys[i] = hilbert_get_key_2d(bits, 64);
-  }
+  cell_update_hilbert_keys(c);
 
   /* sorting arrays */
   for (int i = 0; i < 5; i++) {
@@ -81,13 +95,7 @@ void cell_init(struct cell *c, const int *count, const double pert,
       c->r_sort_lists[i][j] = j;
     }
   }
-  qsort_r(c->r_sort_lists[0], c->count, sizeof(int), sort_x_comp, c->vertices);
-  qsort_r(c->r_sort_lists[1], c->count, sizeof(int), sort_y_comp, c->vertices);
-  qsort_r(c->r_sort_lists[2], c->count, sizeof(int), sort_xyp_comp,
-          c->vertices);
-  qsort_r(c->r_sort_lists[3], c->count, sizeof(int), sort_xym_comp,
-          c->vertices);
-  qsort_r(c->r_sort_lists[4], c->count, sizeof(int), sort_h_comp, c->vertices);
+  cell_update_sorts(c);
 
   delaunay_init(&c->d, &c->hs, c->count, 10 * c->count);
   c->voronoi_active = 0;
@@ -298,6 +306,30 @@ void cell_make_delaunay_periodic(struct cell *c) {
 void cell_construct_voronoi(struct cell *c) {
   c->voronoi_active = 1;
   voronoi_init(&c->v, &c->d);
+}
+
+void cell_lloyd_relax_vertices(struct cell *c) {
+  if (!c->voronoi_active) {
+    fprintf(stderr, "Voronoi tesselation is uninitialized!\n");
+    abort();
+  }
+
+  for (int i = 0; i < c->count; ++i) {
+    int j = c->r_sort_lists[4][i];
+    c->vertices[2 * j] = c->v.cell_centroid[2 * i];
+    c->vertices[2 * j + 1] = c->v.cell_centroid[2 * i + 1];
+  }
+  /* Destroy existing tesselations */
+  delaunay_destroy(&c->d);
+  voronoi_destroy(&c->v);
+  /* Update sorts */
+  cell_update_hilbert_keys(c);
+  cell_update_sorts(c);
+  /* Rebuild tesselations */
+  delaunay_init(&c->d, &c->hs, c->count, 10 * c->count);
+  cell_construct_local_delaunay(c);
+  cell_make_delaunay_periodic(c);
+  cell_construct_voronoi(c);
 }
 
 #define CVORONOI_CELL_H

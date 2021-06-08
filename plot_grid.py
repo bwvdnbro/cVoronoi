@@ -46,7 +46,7 @@ for ix in range(-1, 2):
                 c = cs[ci]
                 it = [c["v0"], c["v1"]]
                 pl.plot(
-                    vs[it]["x"] + ix * 2.0, vs[it]["y"] + iy * 20., "b-"
+                    vs[it]["x"] + ix * 2.0, vs[it]["y"] + iy * 2., "b-"
                 )
 
 pl.plot(gs["x"], gs["y"], "g.")
