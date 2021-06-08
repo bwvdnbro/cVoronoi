@@ -717,8 +717,8 @@ inline static int delaunay_update_search_radii(struct delaunay* restrict d,
   int count = 0;
   for (int i = d->vertex_start; i < d->vertex_end; ++i) {
     if (d->search_radii[i] > r) {
-      int t0 = d->vertex_triangles[i + d->vertex_start];
-      int vi0 = d->vertex_triangle_index[i + d->vertex_start];
+      int t0 = d->vertex_triangles[i];
+      int vi0 = d->vertex_triangle_index[i];
       int vi0p1 = (vi0 + 1) % 3;
       d->search_radii[i] = 2. * delaunay_get_radius(d, t0);
       int t1 = d->triangles[t0].neighbours[vi0p1];

@@ -495,10 +495,12 @@ int main() {
       /* Get rid of the Voronoi grid. */
       voronoi_destroy(&v);
     } else {
-      int count[3] = {3, 3, 1};
-      double dim[3] = {2., 2., 2.};
+      /* seed the random generator with the most random seed ever */
+      srand(42);
+      int count[3] = {2, 20, 1};
+      double dim[3] = {2., 20., 2.};
       struct cell c;
-      cell_init(&c, count, 0.1, dim);
+      cell_init(&c, count, 1., dim);
       cell_construct_local_delaunay(&c);
       cell_make_delaunay_periodic(&c);
       cell_construct_voronoi(&c);
@@ -506,7 +508,7 @@ int main() {
       /* Now print the Voronoi grid for visual inspection. */
       char filename[50];
       sprintf(filename, "vtest%03i.txt", loop);
-      voronoi_print_grid(c.v, filename);
+      voronoi_print_grid(&c.v, filename);
 
       cell_destroy(&c);
       return 0;

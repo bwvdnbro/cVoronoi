@@ -38,6 +38,7 @@ for ci in range(len(cs)):
 xlim = pl.gca().get_xlim()
 ylim = pl.gca().get_ylim()
 
+# periodic boundary conditions
 for ix in range(-1, 2):
     for iy in range(-1, 2):
         if not ix == 0 or not iy == 0:
@@ -45,7 +46,7 @@ for ix in range(-1, 2):
                 c = cs[ci]
                 it = [c["v0"], c["v1"]]
                 pl.plot(
-                    vs[it]["x"] + ix * 1.0e10, vs[it]["y"] + iy * 1.0e10, "b-"
+                    vs[it]["x"] + ix * 2.0, vs[it]["y"] + iy * 20., "b-"
                 )
 
 pl.plot(gs["x"], gs["y"], "g.")
