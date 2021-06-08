@@ -34,7 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "src/hilbert.h"
+#include "hilbert.h"
 
 /**
  * @brief Generate a random uniform double in the range [0, 1].
@@ -115,7 +115,7 @@ int main(int argc, char **argv) {
     unsigned long bits[2];
     bits[0] = x[2 * i] * (1ul << 32);
     bits[1] = x[2 * i + 1] * (1ul << 32);
-    keys[i] = hilbert_get_key_2d(bits, 64);
+    keys[i] = hilbert_get_key(bits, 32);
   }
 
   int *sorth = (int *)malloc(nvert * sizeof(int));

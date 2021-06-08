@@ -9,5 +9,6 @@ find_package(GMP REQUIRED)
 include_directories(src)
 
 add_executable(cVoronoi src/main.c)
+add_executable(testHilbert src/test_hilbert.c)
 
 target_link_libraries(cVoronoi gmp m)
