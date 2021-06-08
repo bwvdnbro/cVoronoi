@@ -57,7 +57,7 @@ unsigned long hilbert_get_key(unsigned long* bits, unsigned int nbits) {
   return key;
 }
 
-#elif defined(DIMENSIONALITY_3D)
+#else
 
 static const unsigned int t3d[12][8][2] = {
     {{5, 0}, {1, 7}, {4, 1}, {2, 6}, {3, 3}, {3, 4}, {4, 2}, {2, 5}},
@@ -93,8 +93,6 @@ unsigned long hilbert_get_key(unsigned long* bits, unsigned int nbits) {
   return key;
 }
 
-#else
-#error "Invalid or undefined dimensionality"
 #endif
 
 #endif  // SWIFT_HILBERT_H

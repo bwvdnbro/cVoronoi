@@ -9,10 +9,8 @@
 
 #if defined(DIMENSIONALITY_2D)
 #include "delaunay2d.h"
-#elif defined(DIMENSIONALITY_3D)
-#include "delaunay3d.h"
 #else
-#error "Invalid or undefined dimensionality"
+#include "delaunay3d.h"
 #endif
 
 #endif  // CVORONOI_DELAUNAY_H

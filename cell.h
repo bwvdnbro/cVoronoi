@@ -53,7 +53,7 @@ void cell_update_hilbert_keys(struct cell *c) {
         (c->vertices[3 * i] - c->hs.anchor[0]) / c->hs.side[0] * (1ul << nbits);
     bits[1] = (c->vertices[3 * i + 1] - c->hs.anchor[1]) / c->hs.side[1] *
               (1ul << nbits);
-#elif defined(DIMENSIONALITY_3D)
+#else
     unsigned long bits[3];
     int nbits = 21;
     bits[0] =
@@ -62,8 +62,6 @@ void cell_update_hilbert_keys(struct cell *c) {
               (1ul << nbits);
     bits[2] = (c->vertices[3 * i + 2] - c->hs.anchor[2]) / c->hs.side[2] *
               (1ul << nbits);
-#else
-#error "Invalid or undefined dimensionality"
 #endif
     c->hilbert_keys[i] = hilbert_get_key(bits, nbits);
   }
@@ -341,12 +339,10 @@ void cell_lloyd_relax_vertices(struct cell *c) {
 #if defined(DIMENSIONALITY_2D)
     c->vertices[3 * j] = c->v.cell_centroid[2 * i];
     c->vertices[3 * j + 1] = c->v.cell_centroid[2 * i + 1];
-#elif defined(DIMENSIONALITY_3D)
+#else
     c->vertices[3 * j] = c->v.cell_centroid[2 * i];
     c->vertices[3 * j + 1] = c->v.cell_centroid[2 * i + 1];
     c->vertices[3 * j + 2] = c->v.cell_centroid[2 * i + 2];
-#else
-#error "Invalid or undefined dimensionality"
 #endif
   }
   /* Destroy existing tesselations */

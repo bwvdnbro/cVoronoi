@@ -8,10 +8,8 @@
 
 #if defined(DIMENSIONALITY_2D)
 #include "voronoi2d.h"
-#elif defined(DIMENSIONALITY_3D)
-#include "voronoi3d.h"
 #else
-#error "Invalid or undefined dimensionality"
+#include "voronoi3d.h"
 #endif
 
 #define CVORONOI_VORONOI_H
