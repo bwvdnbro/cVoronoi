@@ -9,14 +9,9 @@ import argparse
 
 
 def check_vertices(v0, v1, v2, gs):
-    return (
-        v0 >= 0
-        and v0 < len(gs)
-        and v1 >= 0
-        and v1 < len(gs)
-        and v2 >= 0
-        and v2 < len(gs)
-    )
+    return (0 <= v0 < len(gs)
+            and 0 <= v1 < len(gs)
+            and 0 <= v2 < len(gs))
 
 
 argparser = argparse.ArgumentParser()
