@@ -34,7 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "hilbert.h"
+#include "src/hilbert.h"
 
 /**
  * @brief Generate a random uniform double in the range [0, 1].
