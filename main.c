@@ -41,11 +41,7 @@
    compiler warning caused by the use of this non-standard function. */
 #define _GNU_SOURCE
 
-#include "delaunay.h"
-#include "hilbert.h"
-#include "voronoi.h"
 #include "cell.h"
-#include "sort.h"
 
 /**
  * @brief Auxiliary function used to print an arg-sorted list of vertices to a
@@ -143,11 +139,11 @@ int main() {
   voronoi_print_grid(&c.v, filename);
 
   /* Lloyd's relaxation */
-  for (int loop = 1; loop <= 100; ++loop) {
+  for (int loop = 1; loop <= 5; ++loop) {
     printf("Relaxation loop %i\n", loop);
     cell_lloyd_relax_vertices(&c);
     sprintf(filename, "vtest%03i.txt", loop);
-    voronoi_print_grid(&c.v, filename);
+    cell_print_voronoi_grid(&c, filename);
   }
 
   /* cleanup */

@@ -55,8 +55,8 @@ int sort_x_comp(const void *a, const void *b, void *x) {
   int ai = *(int *)a;
   int bi = *(int *)b;
   double *vertices = (double *)x;
-  double ax = vertices[2 * ai];
-  double bx = vertices[2 * bi];
+  double ax = vertices[3 * ai];
+  double bx = vertices[3 * bi];
   return compare_double(ax, bx);
 }
 
@@ -73,8 +73,8 @@ int sort_y_comp(const void *a, const void *b, void *x) {
   int ai = *(int *)a;
   int bi = *(int *)b;
   double *vertices = (double *)x;
-  double ay = vertices[2 * ai + 1];
-  double by = vertices[2 * bi + 1];
+  double ay = vertices[3 * ai + 1];
+  double by = vertices[3 * bi + 1];
   return compare_double(ay, by);
 }
 
@@ -93,10 +93,10 @@ int sort_xyp_comp(const void *a, const void *b, void *x) {
   int ai = *(int *)a;
   int bi = *(int *)b;
   double *vertices = (double *)x;
-  double ax = vertices[2 * ai];
-  double ay = vertices[2 * ai + 1];
-  double bx = vertices[2 * bi];
-  double by = vertices[2 * bi + 1];
+  double ax = vertices[3 * ai];
+  double ay = vertices[3 * ai + 1];
+  double bx = vertices[3 * bi];
+  double by = vertices[3 * bi + 1];
   return compare_double(ax + ay, bx + by);
 }
 
@@ -115,10 +115,10 @@ int sort_xym_comp(const void *a, const void *b, void *x) {
   int ai = *(int *)a;
   int bi = *(int *)b;
   double *vertices = (double *)x;
-  double ax = vertices[2 * ai];
-  double ay = vertices[2 * ai + 1];
-  double bx = vertices[2 * bi];
-  double by = vertices[2 * bi + 1];
+  double ax = vertices[3 * ai];
+  double ay = vertices[3 * ai + 1];
+  double bx = vertices[3 * bi];
+  double by = vertices[3 * bi + 1];
   return compare_double(ax - ay, bx - by);
 }
 

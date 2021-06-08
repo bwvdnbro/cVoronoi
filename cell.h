@@ -4,12 +4,14 @@
 
 #ifndef CVORONOI_CELL_H
 
+#include <float.h>
+
 #include "delaunay.h"
+#include "voronoi.h"
 #include "hilbert.h"
 #include "hydro_space.h"
 #include "sort.h"
-#include "voronoi.h"
-#include <float.h>
+#include "dimensionality.h"
 
 /**
  * @brief Generate a random uniform double in the range [0, 1].
@@ -44,12 +46,26 @@ struct cell {
 
 void cell_update_hilbert_keys(struct cell *c) {
   for (int i = 0; i < c->count; i++) {
+#if defined(DIMENSIONALITY_2D)
     unsigned long bits[2];
+    int nbits = 32;
     bits[0] =
-        (c->vertices[2 * i] - c->hs.anchor[0]) / c->hs.side[0] * (1ul << 32);
-    bits[1] = (c->vertices[2 * i + 1] - c->hs.anchor[1]) / c->hs.side[1] *
-              (1ul << 32);
-    c->hilbert_keys[i] = hilbert_get_key_2d(bits, 64);
+        (c->vertices[3 * i] - c->hs.anchor[0]) / c->hs.side[0] * (1ul << nbits);
+    bits[1] = (c->vertices[3 * i + 1] - c->hs.anchor[1]) / c->hs.side[1] *
+              (1ul << nbits);
+#elif defined(DIMENSIONALITY_3D)
+    unsigned long bits[3];
+    int nbits = 21;
+    bits[0] =
+        (c->vertices[3 * i] - c->hs.anchor[0]) / c->hs.side[0] * (1ul << nbits);
+    bits[1] = (c->vertices[3 * i + 1] - c->hs.anchor[1]) / c->hs.side[1] *
+              (1ul << nbits);
+    bits[2] = (c->vertices[3 * i + 2] - c->hs.anchor[2]) / c->hs.side[2] *
+              (1ul << nbits);
+#else
+#error "Invalid or undefined dimensionality"
+#endif
+    c->hilbert_keys[i] = hilbert_get_key(bits, nbits);
   }
 }
 
@@ -69,18 +85,24 @@ void cell_init(struct cell *c, const int *count, const double pert,
   c->count = count[0] * count[1] * count[2];
 
   /* slightly randomized vertices */
-  c->vertices = (double *)malloc(2 * c->count * sizeof(double));
+  c->vertices = (double *)malloc(3 * c->count * sizeof(double));
   int index = 0;
   for (int ix = 0; ix < count[0]; ++ix) {
     for (int iy = 0; iy < count[1]; ++iy) {
-      c->vertices[index] =
-          (ix + 0.5 + 0.5 * pert * get_random_uniform_double()) *
-          (dim[0] / (double)count[0]);
-      ++index;
-      c->vertices[index] =
-          (iy + 0.5 + 0.5 * pert * get_random_uniform_double()) *
-          (dim[1] / (double)count[1]);
-      ++index;
+      for (int iz = 0; iz < count[2]; ++iz) {
+        c->vertices[index] =
+            (ix + 0.5 + 0.5 * pert * get_random_uniform_double()) *
+            (dim[0] / (double)count[0]);
+        ++index;
+        c->vertices[index] =
+            (iy + 0.5 + 0.5 * pert * get_random_uniform_double()) *
+            (dim[1] / (double)count[1]);
+        ++index;
+        c->vertices[index] =
+            (iz + 0.5 + 0.5 * pert * get_random_uniform_double()) *
+            (dim[2] / (double)count[2]);
+        ++index;
+      }
     }
   }
 
@@ -117,7 +139,7 @@ void cell_construct_local_delaunay(struct cell *c) {
   /* Add the local vertices, one by one, in Hilbert order. */
   for (int i = 0; i < c->count; ++i) {
     int j = c->r_sort_lists[4][i];
-    delaunay_add_vertex(&c->d, c->vertices[2 * j], c->vertices[2 * j + 1]);
+    delaunay_add_vertex(&c->d, c->vertices[3 * j], c->vertices[3 * j + 1]);
   }
 
   /* we are done adding the original vertices. We need to consolidate the
@@ -156,136 +178,136 @@ void cell_make_delaunay_periodic(struct cell *c) {
     /* add ghosts for the positive horizontal boundary */
     int i = 0;
     int vi = c->r_sort_lists[0][i];
-    while (c->vertices[2 * vi] < r) {
+    while (c->vertices[3 * vi] < r) {
       if (i == c->count) break;
       ++i;
-      if (c->vertices[2 * vi] < old_r) {
+      if (c->vertices[3 * vi] < old_r) {
         vi = c->r_sort_lists[0][i];
         continue;
       }
       delaunay_add_vertex(&c->d,
-                          c->vertices[2 * vi] + c->hs.anchor[0] + c->hs.side[0],
-                          c->vertices[2 * vi + 1]);
+                          c->vertices[3 * vi] + c->hs.anchor[0] + c->hs.side[0],
+                          c->vertices[3 * vi + 1]);
       vi = c->r_sort_lists[0][i];
     }
     /* add ghosts for the negative horizontal boundary */
     i = c->count - 1;
     vi = c->r_sort_lists[0][i];
-    while (c->hs.anchor[0] + c->hs.side[0] - c->vertices[2 * vi] < r) {
+    while (c->hs.anchor[0] + c->hs.side[0] - c->vertices[3 * vi] < r) {
       if (i == -1) break;
       --i;
-      if (c->hs.anchor[0] + c->hs.side[0] - c->vertices[2 * vi] < old_r) {
+      if (c->hs.anchor[0] + c->hs.side[0] - c->vertices[3 * vi] < old_r) {
         vi = c->r_sort_lists[0][i];
         continue;
       }
       delaunay_log("x: %g, old_r: %g, r: %g",
-                   c->hs.anchor[0] + c->hs.side[0] - c->vertices[2 * vi], old_r,
+                   c->hs.anchor[0] + c->hs.side[0] - c->vertices[3 * vi], old_r,
                    r);
       delaunay_add_vertex(
-          &c->d, c->vertices[2 * vi] - (c->hs.anchor[0] + c->hs.side[0]),
-          c->vertices[2 * vi + 1]);
+          &c->d, c->vertices[3 * vi] - (c->hs.anchor[0] + c->hs.side[0]),
+          c->vertices[3 * vi + 1]);
       vi = c->r_sort_lists[0][i];
     }
     /* add ghosts for the positive vertical boundary */
     i = 0;
     vi = c->r_sort_lists[1][i];
-    while (c->vertices[2 * vi + 1] < r) {
+    while (c->vertices[3 * vi + 1] < r) {
       if (i == c->count) break;
       ++i;
-      if (c->vertices[2 * vi + 1] < old_r) {
+      if (c->vertices[3 * vi + 1] < old_r) {
         vi = c->r_sort_lists[1][i];
         continue;
       }
       delaunay_add_vertex(
-          &c->d, c->vertices[2 * vi],
-          c->vertices[2 * vi + 1] + c->hs.anchor[1] + c->hs.side[1]);
+          &c->d, c->vertices[3 * vi],
+          c->vertices[3 * vi + 1] + c->hs.anchor[1] + c->hs.side[1]);
       vi = c->r_sort_lists[1][i];
     }
     /* add ghosts for the negative vertical boundary */
     i = c->count - 1;
     vi = c->r_sort_lists[1][i];
-    while (c->hs.anchor[1] + c->hs.side[1] - c->vertices[2 * vi + 1] < r) {
+    while (c->hs.anchor[1] + c->hs.side[1] - c->vertices[3 * vi + 1] < r) {
       if (i == -1) break;
       --i;
-      if (c->hs.anchor[1] + c->hs.side[1] - c->vertices[2 * vi + 1] < old_r) {
+      if (c->hs.anchor[1] + c->hs.side[1] - c->vertices[3 * vi + 1] < old_r) {
         vi = c->r_sort_lists[1][i];
         continue;
       }
       delaunay_add_vertex(
-          &c->d, c->vertices[2 * vi],
-          c->vertices[2 * vi + 1] - (c->hs.anchor[1] + c->hs.side[1]));
+          &c->d, c->vertices[3 * vi],
+          c->vertices[3 * vi + 1] - (c->hs.anchor[1] + c->hs.side[1]));
       vi = c->r_sort_lists[1][i];
     }
     /* add ghosts for the positive x=y diagonal (top right) corner */
     i = 0;
     vi = c->r_sort_lists[2][i];
-    while (c->vertices[2 * vi] + c->vertices[2 * vi + 1] < r * sqrt2) {
+    while (c->vertices[3 * vi] + c->vertices[3 * vi + 1] < r * sqrt2) {
       if (i == c->count) break;
       ++i;
-      if (c->vertices[2 * vi] + c->vertices[2 * vi + 1] < old_r * sqrt2) {
+      if (c->vertices[3 * vi] + c->vertices[3 * vi + 1] < old_r * sqrt2) {
         vi = c->r_sort_lists[2][i];
         continue;
       }
       delaunay_add_vertex(
-          &c->d, c->vertices[2 * vi] + c->hs.anchor[0] + c->hs.side[0],
-          c->vertices[2 * vi + 1] + c->hs.anchor[1] + c->hs.side[1]);
+          &c->d, c->vertices[3 * vi] + c->hs.anchor[0] + c->hs.side[0],
+          c->vertices[3 * vi + 1] + c->hs.anchor[1] + c->hs.side[1]);
       vi = c->r_sort_lists[2][i];
     }
     /* add ghosts for the negative x=y diagonal (bottom left) corner */
     i = c->count - 1;
     vi = c->r_sort_lists[2][i];
-    while (c->hs.anchor[0] + c->hs.side[0] - c->vertices[2 * vi] +
-               c->hs.anchor[1] + c->hs.side[1] - c->vertices[2 * vi + 1] <
+    while (c->hs.anchor[0] + c->hs.side[0] - c->vertices[3 * vi] +
+               c->hs.anchor[1] + c->hs.side[1] - c->vertices[3 * vi + 1] <
            r * sqrt2) {
       if (i == -1) break;
       --i;
-      if (c->hs.anchor[0] + c->hs.side[0] - c->vertices[2 * vi] +
-              c->hs.anchor[1] + c->hs.side[1] - c->vertices[2 * vi + 1] <
+      if (c->hs.anchor[0] + c->hs.side[0] - c->vertices[3 * vi] +
+              c->hs.anchor[1] + c->hs.side[1] - c->vertices[3 * vi + 1] <
           old_r * sqrt2) {
         vi = c->r_sort_lists[2][i];
         continue;
       }
       delaunay_add_vertex(
-          &c->d, c->vertices[2 * vi] - (c->hs.anchor[0] + c->hs.side[0]),
-          c->vertices[2 * vi + 1] - (c->hs.anchor[1] + c->hs.side[1]));
+          &c->d, c->vertices[3 * vi] - (c->hs.anchor[0] + c->hs.side[0]),
+          c->vertices[3 * vi + 1] - (c->hs.anchor[1] + c->hs.side[1]));
       vi = c->r_sort_lists[2][i];
     }
     /* add ghosts for the positive x=-y diagonal (bottom right) corner */
     i = 0;
     vi = c->r_sort_lists[3][i];
-    while (c->vertices[2 * vi] - (c->hs.anchor[1] + c->hs.side[1]) +
-               c->vertices[2 * vi + 1] <
+    while (c->vertices[3 * vi] - (c->hs.anchor[1] + c->hs.side[1]) +
+               c->vertices[3 * vi + 1] <
            r * sqrt2) {
       if (i == c->count) break;
       ++i;
-      if (c->vertices[2 * vi] - (c->hs.anchor[1] + c->hs.side[1]) +
-              c->vertices[2 * vi + 1] <
+      if (c->vertices[3 * vi] - (c->hs.anchor[1] + c->hs.side[1]) +
+              c->vertices[3 * vi + 1] <
           old_r * sqrt2) {
         vi = c->r_sort_lists[3][i];
         continue;
       }
       delaunay_add_vertex(
-          &c->d, c->vertices[2 * vi] + c->hs.anchor[0] + c->hs.side[0],
-          c->vertices[2 * vi + 1] - (c->hs.anchor[1] + c->hs.side[1]));
+          &c->d, c->vertices[3 * vi] + c->hs.anchor[0] + c->hs.side[0],
+          c->vertices[3 * vi + 1] - (c->hs.anchor[1] + c->hs.side[1]));
       vi = c->r_sort_lists[3][i];
     }
     /* add ghosts for the negative x=-y diagonal (top left) corner */
     i = c->count - 1;
     vi = c->r_sort_lists[3][i];
-    while (c->hs.anchor[0] + c->hs.side[0] - c->vertices[2 * vi] -
-               c->vertices[2 * vi + 1] <
+    while (c->hs.anchor[0] + c->hs.side[0] - c->vertices[3 * vi] -
+               c->vertices[3 * vi + 1] <
            r * sqrt2) {
       if (i == -1) break;
       --i;
-      if (c->hs.anchor[0] + c->hs.side[0] - c->vertices[2 * vi] -
-              c->vertices[2 * vi + 1] <
+      if (c->hs.anchor[0] + c->hs.side[0] - c->vertices[3 * vi] -
+              c->vertices[3 * vi + 1] <
           old_r * sqrt2) {
         vi = c->r_sort_lists[3][i];
         continue;
       }
       delaunay_add_vertex(
-          &c->d, c->vertices[2 * vi] - (c->hs.anchor[0] + c->hs.side[0]),
-          c->vertices[2 * vi + 1] + c->hs.anchor[1] + c->hs.side[1]);
+          &c->d, c->vertices[3 * vi] - (c->hs.anchor[0] + c->hs.side[0]),
+          c->vertices[3 * vi + 1] + c->hs.anchor[1] + c->hs.side[1]);
       vi = c->r_sort_lists[3][i];
     }
     /* update the search radii to the new value and count the number of larger
@@ -316,8 +338,16 @@ void cell_lloyd_relax_vertices(struct cell *c) {
 
   for (int i = 0; i < c->count; ++i) {
     int j = c->r_sort_lists[4][i];
-    c->vertices[2 * j] = c->v.cell_centroid[2 * i];
-    c->vertices[2 * j + 1] = c->v.cell_centroid[2 * i + 1];
+#if defined(DIMENSIONALITY_2D)
+    c->vertices[3 * j] = c->v.cell_centroid[2 * i];
+    c->vertices[3 * j + 1] = c->v.cell_centroid[2 * i + 1];
+#elif defined(DIMENSIONALITY_3D)
+    c->vertices[3 * j] = c->v.cell_centroid[2 * i];
+    c->vertices[3 * j + 1] = c->v.cell_centroid[2 * i + 1];
+    c->vertices[3 * j + 2] = c->v.cell_centroid[2 * i + 2];
+#else
+#error "Invalid or undefined dimensionality"
+#endif
   }
   /* Destroy existing tesselations */
   delaunay_destroy(&c->d);
@@ -330,6 +360,15 @@ void cell_lloyd_relax_vertices(struct cell *c) {
   cell_construct_local_delaunay(c);
   cell_make_delaunay_periodic(c);
   cell_construct_voronoi(c);
+}
+
+void cell_print_voronoi_grid(const struct cell *c, const char *file_name) {
+  if (!c->voronoi_active) {
+    fprintf(stderr, "Voronoi tesselation is uninitialized!\n");
+    abort();
+  }
+
+  voronoi_print_grid(&c->v, file_name);
 }
 
 #define CVORONOI_CELL_H
