@@ -219,10 +219,10 @@ void cell_make_delaunay_periodic(struct cell *c) {
     /* add ghosts for the positive x=y diagonal (top right) corner */
     i = 0;
     vi = c->r_sort_lists[2][i];
-    while (c->vertices[2 * vi] + c->vertices[2 * vi + 1] < r) {
+    while (c->vertices[2 * vi] + c->vertices[2 * vi + 1] < r * sqrt2) {
       if (i == c->count) break;
       ++i;
-      if (c->vertices[2 * vi] + c->vertices[2 * vi + 1] < old_r) {
+      if (c->vertices[2 * vi] + c->vertices[2 * vi + 1] < old_r * sqrt2) {
         vi = c->r_sort_lists[2][i];
         continue;
       }
@@ -236,12 +236,12 @@ void cell_make_delaunay_periodic(struct cell *c) {
     vi = c->r_sort_lists[2][i];
     while (c->hs.anchor[0] + c->hs.side[0] - c->vertices[2 * vi] +
                c->hs.anchor[1] + c->hs.side[1] - c->vertices[2 * vi + 1] <
-           r) {
+           r * sqrt2) {
       if (i == -1) break;
       --i;
       if (c->hs.anchor[0] + c->hs.side[0] - c->vertices[2 * vi] +
               c->hs.anchor[1] + c->hs.side[1] - c->vertices[2 * vi + 1] <
-          old_r) {
+          old_r * sqrt2) {
         vi = c->r_sort_lists[2][i];
         continue;
       }
@@ -255,12 +255,12 @@ void cell_make_delaunay_periodic(struct cell *c) {
     vi = c->r_sort_lists[3][i];
     while (c->vertices[2 * vi] - (c->hs.anchor[1] + c->hs.side[1]) +
                c->vertices[2 * vi + 1] <
-           r) {
+           r * sqrt2) {
       if (i == c->count) break;
       ++i;
       if (c->vertices[2 * vi] - (c->hs.anchor[1] + c->hs.side[1]) +
               c->vertices[2 * vi + 1] <
-          old_r) {
+          old_r * sqrt2) {
         vi = c->r_sort_lists[3][i];
         continue;
       }
@@ -274,12 +274,12 @@ void cell_make_delaunay_periodic(struct cell *c) {
     vi = c->r_sort_lists[3][i];
     while (c->hs.anchor[0] + c->hs.side[0] - c->vertices[2 * vi] -
                c->vertices[2 * vi + 1] <
-           r) {
+           r * sqrt2) {
       if (i == -1) break;
       --i;
       if (c->hs.anchor[0] + c->hs.side[0] - c->vertices[2 * vi] -
               c->vertices[2 * vi + 1] <
-          old_r) {
+          old_r * sqrt2) {
         vi = c->r_sort_lists[3][i];
         continue;
       }

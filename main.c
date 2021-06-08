@@ -142,6 +142,7 @@ int main() {
   sprintf(filename, "vtest.txt");
   voronoi_print_grid(&c.v, filename);
 
+  /* Lloyd's relaxation */
   for (int loop = 1; loop <= 100; ++loop) {
     printf("Relaxation loop %i\n", loop);
     cell_lloyd_relax_vertices(&c);
@@ -149,6 +150,7 @@ int main() {
     voronoi_print_grid(&c.v, filename);
   }
 
+  /* cleanup */
   cell_destroy(&c);
   return 0;
 }
