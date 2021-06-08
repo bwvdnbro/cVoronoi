@@ -134,16 +134,19 @@ int main() {
   cell_construct_voronoi(&c);
 
   /* Now print the Voronoi grid for visual inspection. */
-  char filename[50];
-  sprintf(filename, "vtest.txt");
-  voronoi_print_grid(&c.v, filename);
+  char vor_filename[50];
+  char del_filename[50];
+  sprintf(vor_filename, "vtest.txt");
+  sprintf(del_filename, "test.txt");
+  cell_print_tesselations(&c, vor_filename, del_filename);
 
   /* Lloyd's relaxation */
   for (int loop = 1; loop <= 5; ++loop) {
     printf("Relaxation loop %i\n", loop);
     cell_lloyd_relax_vertices(&c);
-    sprintf(filename, "vtest%03i.txt", loop);
-    cell_print_voronoi_grid(&c, filename);
+    sprintf(vor_filename, "vtest%03i.txt", loop);
+    sprintf(del_filename, "test%03i.txt", loop);
+    cell_print_tesselations(&c, vor_filename, del_filename);
   }
 
   /* cleanup */

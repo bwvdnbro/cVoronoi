@@ -358,13 +358,15 @@ void cell_lloyd_relax_vertices(struct cell *c) {
   cell_construct_voronoi(c);
 }
 
-void cell_print_voronoi_grid(const struct cell *c, const char *file_name) {
+void cell_print_tesselations(const struct cell *c, const char *vor_file_name,
+                             const char *del_file_name) {
   if (!c->voronoi_active) {
     fprintf(stderr, "Voronoi tesselation is uninitialized!\n");
     abort();
   }
 
-  voronoi_print_grid(&c->v, file_name);
+  voronoi_print_grid(&c->v, vor_file_name);
+  delaunay_print_tessellation(&c->d, del_file_name);
 }
 
 #define CVORONOI_CELL_H

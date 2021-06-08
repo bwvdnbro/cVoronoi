@@ -27,10 +27,12 @@ ts = np.fromregex(
 
 print(vs.shape, ts.shape)
 
-pl.plot(vs["x"], vs["y"], "k.")
+pl.plot(vs["x"][3:], vs["y"][3:], "k.")
 for ti in range(len(ts)):
     t = ts[ti]
     it = [t["v0"], t["v1"], t["v2"], t["v0"]]
+    if any([v < 3 for v in it]):
+        continue
     pl.plot(vs[it]["x"], vs[it]["y"], "k-")
 
     if plotCircles:
