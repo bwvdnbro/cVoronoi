@@ -148,40 +148,6 @@ struct delaunay {
   struct geometry geometry;
 };
 
-/**
- * @brief Convert the given double precision floating point value to an integer,
- * by reading out its 52-bit mantissa.
- *
- * A floating point variable consists of a mantissa and an exponent, and can be
- * thought of as the base 2 equivalent of scientific notation:
- * @f[
- *    V = M \times[} 2^E
- * @f]
- * The sign of the mantissa (highest bit of the mantissa) determines the sign
- * of the floating point value.
- *
- * This code was taken from the AREPO-code with some small adaptations.
- *
- * @param d Input double precision floating point value.
- * @return Integer value of the 52-bit mantissa.
- */
-static inline unsigned long int delaunay_double_to_int(double d) {
-  /* the idea here is pretty simple: we set up a union consisting of a 64-bit
-     double precision floating point value and a 64-bit unsigned long integer
-     that occupy the same 64-bits in memory.
-     We then copy the value we want to convert into the double precision
-     variable and access its individual bits through the 64-bit unsigned long
-     integer variable. */
-  union {
-    double d;
-    unsigned long int ull;
-  } u;
-  u.d = d;
-  /* the mask filters out the lowest 52 bits of the binary sequence, which
-     correspond to the mantissa of the floating point variable */
-  return (u.ull & 0xFFFFFFFFFFFFFllu);
-}
-
 inline static void delaunay_init_vertex(struct delaunay* restrict d,
                                         const int v, double x, double y) {
   /* store a copy of the vertex coordinates (we should get rid of this for
@@ -420,7 +386,7 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
 #ifdef DELAUNAY_NONEXACT
         double dx = d->rescaled_vertices[2 * vt2_0];
         double dy = d->rescaled_vertices[2 * vt2_0 + 1];
-        double test = geometry_in_circle(ax, ay, bx, by, cx, cy, dx, dy);
+        double test = geometry_in_sphere(ax, ay, bx, by, cx, cy, dx, dy);
 #else
         double test = -1.;
 #endif
@@ -428,8 +394,8 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
         unsigned long dix = d->integer_vertices[2 * vt2_0];
         unsigned long diy = d->integer_vertices[2 * vt2_0 + 1];
 
-        int testi = geometry_in_circle_exact(&d->geometry, aix, aiy, bix, biy,
-                                             cix, ciy, dix, diy);
+        int testi = geometry_in_circle_sphere(&d->geometry, aix, aiy, bix, biy,
+                                              cix, ciy, dix, diy);
         if (test > 0. || testi > 0) {
           fprintf(stderr, "Wrong triangle!\n");
           fprintf(stderr, "Triangle %i: %i (%g %g) %i (%g %g) %i (%g %g)\n", i,
@@ -441,7 +407,7 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
           fprintf(stderr, "Test result: %g\n", test);
 #ifdef DELAUNAY_NONEXACT
           fprintf(stderr, "Orientation: %g\n",
-                  geometry_orient2d(ax, ay, bx, by, cx, cy));
+                  geometry_orient(ax, ay, bx, by, cx, cy));
 #endif
           abort();
         }
@@ -667,16 +633,16 @@ inline static int delaunay_test_point_inside_triangle(
   double dy = d->rescaled_vertices[2 * vt2 + 1];
 
   delaunay_log("orient2d: (%g %g) (%g %g) (%g %g) = %g", cx, cy, dx, dy, ax, ay,
-               geometry_orient2d(cx, cy, dx, dy, ax, ay));
-  double test0 = geometry_orient2d(cx, cy, dx, dy, ax, ay);
+               geometry_orient(cx, cy, dx, dy, ax, ay));
+  double test0 = geometry_orient(cx, cy, dx, dy, ax, ay);
 
   delaunay_log("orient2d: (%g %g) (%g %g) (%g %g) = %g", dx, dy, bx, by, ax, ay,
-               geometry_orient2d(dx, dy, bx, by, ax, ay));
-  double test1 = geometry_orient2d(dx, dy, bx, by, ax, ay);
+               geometry_orient(dx, dy, bx, by, ax, ay));
+  double test1 = geometry_orient(dx, dy, bx, by, ax, ay);
 
   delaunay_log("orient2d: (%g %g) (%g %g) (%g %g) = %g", bx, by, cx, cy, ax, ay,
-               geometry_orient2d(bx, by, cx, cy, ax, ay));
-  double test2 = geometry_orient2d(bx, by, cx, cy, ax, ay);
+               geometry_orient(bx, by, cx, cy, ax, ay));
+  double test2 = geometry_orient(bx, by, cx, cy, ax, ay);
 #endif
 
   unsigned long int aix = d->integer_vertices[2 * v];
@@ -696,11 +662,11 @@ inline static int delaunay_test_point_inside_triangle(
      However, it is unclear whether such an approach is beneficial because it
      would introduce additional branching of the code. */
   int testi0 =
-      geometry_orient2d_exact(&d->geometry, cix, ciy, dix, diy, aix, aiy);
+      geometry_orient_exact(&d->geometry, cix, ciy, dix, diy, aix, aiy);
   int testi1 =
-      geometry_orient2d_exact(&d->geometry, dix, diy, bix, biy, aix, aiy);
+      geometry_orient_exact(&d->geometry, dix, diy, bix, biy, aix, aiy);
   int testi2 =
-      geometry_orient2d_exact(&d->geometry, bix, biy, cix, ciy, aix, aiy);
+      geometry_orient_exact(&d->geometry, bix, biy, cix, ciy, aix, aiy);
 
 #ifdef DELAUNAY_NONEXACT
   delaunay_assert(test0 * testi0 >= 0);
@@ -888,10 +854,10 @@ inline static void delaunay_check_triangle(struct delaunay* restrict d, int t) {
   double dx = d->rescaled_vertices[2 * vt2_0];
   double dy = d->rescaled_vertices[2 * vt2_0 + 1];
 
-  double test = geometry_in_circle(ax, ay, bx, by, cx, cy, dx, dy);
+  double test = geometry_in_sphere(ax, ay, bx, by, cx, cy, dx, dy);
   delaunay_log("In circle: (%g %g) (%g %g) (%g %g) (%g %g) (%g) = %g", ax, ay,
                bx, by, cx, cy, dx, dy,
-               geometry_orient2d(ax, ay, bx, by, cx, cy), test);
+               geometry_orient(ax, ay, bx, by, cx, cy), test);
 #endif
 
   unsigned long int aix = d->integer_vertices[2 * vt1_0];
@@ -906,8 +872,8 @@ inline static void delaunay_check_triangle(struct delaunay* restrict d, int t) {
   unsigned long int dix = d->integer_vertices[2 * vt2_0];
   unsigned long int diy = d->integer_vertices[2 * vt2_0 + 1];
 
-  int testi = geometry_in_circle_exact(&d->geometry, aix, aiy, bix, biy, cix,
-                                       ciy, dix, diy);
+  int testi = geometry_in_circle_sphere(&d->geometry, aix, aiy, bix, biy, cix,
+                                        ciy, dix, diy);
 
 #ifdef DELAUNAY_NONEXACT
   delaunay_assert(test * testi >= 0);
