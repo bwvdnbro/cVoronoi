@@ -261,171 +261,6 @@ inline static int delaunay_new_triangle(struct delaunay* restrict d) {
 }
 
 /**
- * @brief Perform an (expensive) check on the tessellation to see that it is
- * still valid.
- *
- * This function will iterate over all triangles (except the 3 dummy triangles)
- * of the tessellation. For each triangle, it checks that all neighbour
- * relations for that triangle are set correctly (i.e. if triangle A is a
- * neighbour of B, B should always also be a neighbour of A; if triangle A
- * thinks it is the ith neighbour in triangle B, it should also be found in the
- * ith neighbour position in triangle B), and that none fo the vertices of
- * neighbouring triangles are within the circumcircle of the triangle, which
- * would violate the Delaunay criterion.
- *
- * Finally, this function also checks the vertex-triangle information by
- * making sure that all triangle indices stored in vertex_triangles and
- * vertex_triangle_index are correct.
- *
- * The function will abort with an error if any problems are found with the
- * tessellation.
- *
- * This function returns immediately if DELAUNAY_CHECKS in inactive. It adds
- * a significant extra runtime cost and should never be used in production runs.
- *
- * @param d Delaunay tessellation (note that this parameter cannot be const as
- * one might suspect, since the geometrical test variables are used to test
- * the Delaunay criterion and they cannot be read-only).
- */
-inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
-
-#ifndef DELAUNAY_CHECKS
-  /* return immediately if we do not want to run the expensive checks */
-  return;
-#endif
-
-  /* Loop over all triangles. We skip the dummy triangles, since their
-     neighbour relations are (on purpose) incorrect. */
-  for (int i = 3; i < d->triangle_index; ++i) {
-    int vt1_0 = d->triangles[i].vertices[0];
-    int vt1_1 = d->triangles[i].vertices[1];
-    int vt1_2 = d->triangles[i].vertices[2];
-
-#ifdef DELAUNAY_NONEXACT
-    double ax = d->rescaled_vertices[2 * vt1_0];
-    double ay = d->rescaled_vertices[2 * vt1_0 + 1];
-
-    double bx = d->rescaled_vertices[2 * vt1_1];
-    double by = d->rescaled_vertices[2 * vt1_1 + 1];
-
-    double cx = d->rescaled_vertices[2 * vt1_2];
-    double cy = d->rescaled_vertices[2 * vt1_2 + 1];
-#endif
-
-    unsigned long int aix = d->integer_vertices[2 * vt1_0];
-    unsigned long int aiy = d->integer_vertices[2 * vt1_0 + 1];
-
-    unsigned long int bix = d->integer_vertices[2 * vt1_1];
-    unsigned long int biy = d->integer_vertices[2 * vt1_1 + 1];
-
-    unsigned long int cix = d->integer_vertices[2 * vt1_2];
-    unsigned long int ciy = d->integer_vertices[2 * vt1_2 + 1];
-
-    /* loop over the 3 neighbours of this triangle */
-    for (int j = 0; j < 3; ++j) {
-      int ngb = d->triangles[i].neighbours[j];
-      /* skip potential dummy neighbours, since they have an invalid vertex
-         that will break the Delaunay test. */
-      if (ngb > 2) {
-        int i0 = d->triangles[i].index_in_neighbour[j];
-
-        /* check the mutual neighbour relations */
-        if (d->triangles[ngb].neighbours[i0] != i) {
-          fprintf(stderr, "Wrong neighbour!\n");
-          fprintf(stderr, "Triangle %i: %i %i %i\n", i, vt1_0, vt1_1, vt1_2);
-          fprintf(stderr, "Neighbours: %i %i %i\n",
-                  d->triangles[i].neighbours[0], d->triangles[i].neighbours[1],
-                  d->triangles[i].neighbours[2]);
-          fprintf(stderr, "Index in neighbour: %i %i %i\n",
-                  d->triangles[i].index_in_neighbour[0],
-                  d->triangles[i].index_in_neighbour[1],
-                  d->triangles[i].index_in_neighbour[2]);
-          fprintf(stderr, "Neighbour triangle %i: %i %i %i\n", ngb,
-                  d->triangles[ngb].vertices[0], d->triangles[ngb].vertices[1],
-                  d->triangles[ngb].vertices[2]);
-          fprintf(
-              stderr, "Neighbours: %i %i %i\n", d->triangles[ngb].neighbours[0],
-              d->triangles[ngb].neighbours[1], d->triangles[ngb].neighbours[2]);
-          fprintf(stderr, "Index in neighbour: %i %i %i\n",
-                  d->triangles[ngb].index_in_neighbour[0],
-                  d->triangles[ngb].index_in_neighbour[1],
-                  d->triangles[ngb].index_in_neighbour[2]);
-          abort();
-        }
-
-        /* check the neighbour index information */
-        if (d->triangles[ngb].index_in_neighbour[i0] != j) {
-          fprintf(stderr, "Wrong neighbour!\n");
-          fprintf(stderr, "Triangle %i: %i %i %i\n", i, vt1_0, vt1_1, vt1_2);
-          fprintf(stderr, "Neighbours: %i %i %i\n",
-                  d->triangles[i].neighbours[0], d->triangles[i].neighbours[1],
-                  d->triangles[i].neighbours[2]);
-          fprintf(stderr, "Index in neighbour: %i %i %i\n",
-                  d->triangles[i].index_in_neighbour[0],
-                  d->triangles[i].index_in_neighbour[1],
-                  d->triangles[i].index_in_neighbour[2]);
-          fprintf(stderr, "Neighbour triangle %i: %i %i %i\n", ngb,
-                  d->triangles[ngb].vertices[0], d->triangles[ngb].vertices[1],
-                  d->triangles[ngb].vertices[2]);
-          fprintf(
-              stderr, "Neighbours: %i %i %i\n", d->triangles[ngb].neighbours[0],
-              d->triangles[ngb].neighbours[1], d->triangles[ngb].neighbours[2]);
-          fprintf(stderr, "Index in neighbour: %i %i %i\n",
-                  d->triangles[ngb].index_in_neighbour[0],
-                  d->triangles[ngb].index_in_neighbour[1],
-                  d->triangles[ngb].index_in_neighbour[2]);
-          abort();
-        }
-
-        /* now get the vertex that is not shared between the triangle and this
-           neighbour and make sure it is not in the triangle's circumcircle */
-        int vt2_0 = d->triangles[ngb].vertices[i0];
-
-#ifdef DELAUNAY_NONEXACT
-        double dx = d->rescaled_vertices[2 * vt2_0];
-        double dy = d->rescaled_vertices[2 * vt2_0 + 1];
-        double test = geometry_in_sphere(ax, ay, bx, by, cx, cy, dx, dy);
-#else
-        double test = -1.;
-#endif
-
-        unsigned long dix = d->integer_vertices[2 * vt2_0];
-        unsigned long diy = d->integer_vertices[2 * vt2_0 + 1];
-
-        int testi = geometry_in_circle_sphere(&d->geometry, aix, aiy, bix, biy,
-                                              cix, ciy, dix, diy);
-        if (test > 0. || testi > 0) {
-          fprintf(stderr, "Wrong triangle!\n");
-          fprintf(stderr, "Triangle %i: %i (%g %g) %i (%g %g) %i (%g %g)\n", i,
-                  vt1_0, d->vertices[2 * vt1_0], d->vertices[2 * vt1_0 + 1],
-                  vt1_1, d->vertices[2 * vt1_1], d->vertices[2 * vt1_1 + 1],
-                  vt1_2, d->vertices[2 * vt1_2], d->vertices[2 * vt1_2 + 1]);
-          fprintf(stderr, "Opposite vertex: %i (%g %g)\n", vt2_0,
-                  d->vertices[2 * vt2_0], d->vertices[2 * vt2_0 + 1]);
-          fprintf(stderr, "Test result: %g\n", test);
-#ifdef DELAUNAY_NONEXACT
-          fprintf(stderr, "Orientation: %g\n",
-                  geometry_orient(ax, ay, bx, by, cx, cy));
-#endif
-          abort();
-        }
-      }
-    }
-  }
-
-  /* Loop over all vertex_triangle elements and check that they indeed link
-     to triangles that contain their respective vertex */
-  for (int i = 0; i < d->vertex_index; ++i) {
-    int t = d->vertex_triangles[i];
-    int vi = d->vertex_triangle_index[i];
-    if (d->triangles[t].vertices[vi] != i) {
-      fprintf(stderr, "Wrong vertex-triangle connection!");
-      abort();
-    }
-  }
-}
-
-/**
  * @brief Initialize the Delaunay tessellation.
  *
  * This function allocates memory for all arrays that make up the tessellation
@@ -543,7 +378,7 @@ inline static void delaunay_init(struct delaunay* restrict d,
   d->last_triangle = first_triangle;
 
   /* Perform potential log output and sanity checks */
-  delaunay_log("Post init check");
+//  delaunay_log("Post init check");
 //  delaunay_check_tessellation(d);
 }
 
@@ -1234,21 +1069,6 @@ inline static double delaunay_get_radius(const struct delaunay* restrict d,
 }
 
 /**
- * @brief Consolidate the Delaunay tessellation. This signals the end of the
- * addition of normal vertices. All vertices added after this point are
- * considered to be ghost vertices.
- *
- * This function will also enable running delaunay_update_search_radii() and
- * will make it possible to construct a Voronoi grid based on the tessellation.
- *
- * @param d Delaunay tessellation.
- */
-inline static void delaunay_consolidate(struct delaunay* restrict d) {
-  /* perform a consistency test if enabled */
-  delaunay_check_tessellation(d);
-}
-
-/**
  * @brief Update the search radii of all vertices based on the given radius.
  *
  * If the current search radius of a vertex is larger than the given value,
@@ -1289,6 +1109,186 @@ inline static int delaunay_update_search_radii(struct delaunay* restrict d,
     }
   }
   return count;
+}
+
+/**
+ * @brief Perform an (expensive) check on the tessellation to see that it is
+ * still valid.
+ *
+ * This function will iterate over all triangles (except the 3 dummy triangles)
+ * of the tessellation. For each triangle, it checks that all neighbour
+ * relations for that triangle are set correctly (i.e. if triangle A is a
+ * neighbour of B, B should always also be a neighbour of A; if triangle A
+ * thinks it is the ith neighbour in triangle B, it should also be found in the
+ * ith neighbour position in triangle B), and that none fo the vertices of
+ * neighbouring triangles are within the circumcircle of the triangle, which
+ * would violate the Delaunay criterion.
+ *
+ * Finally, this function also checks the vertex-triangle information by
+ * making sure that all triangle indices stored in vertex_triangles and
+ * vertex_triangle_index are correct.
+ *
+ * The function will abort with an error if any problems are found with the
+ * tessellation.
+ *
+ * This function returns immediately if DELAUNAY_CHECKS in inactive. It adds
+ * a significant extra runtime cost and should never be used in production runs.
+ *
+ * @param d Delaunay tessellation (note that this parameter cannot be const as
+ * one might suspect, since the geometrical test variables are used to test
+ * the Delaunay criterion and they cannot be read-only).
+ */
+inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
+
+#ifndef DELAUNAY_CHECKS
+  /* return immediately if we do not want to run the expensive checks */
+  return;
+#endif
+
+  /* Loop over all triangles. We skip the dummy triangles, since their
+     neighbour relations are (on purpose) incorrect. */
+  for (int i = 3; i < d->triangle_index; ++i) {
+    int vt1_0 = d->triangles[i].vertices[0];
+    int vt1_1 = d->triangles[i].vertices[1];
+    int vt1_2 = d->triangles[i].vertices[2];
+
+#ifdef DELAUNAY_NONEXACT
+    double ax = d->rescaled_vertices[2 * vt1_0];
+    double ay = d->rescaled_vertices[2 * vt1_0 + 1];
+
+    double bx = d->rescaled_vertices[2 * vt1_1];
+    double by = d->rescaled_vertices[2 * vt1_1 + 1];
+
+    double cx = d->rescaled_vertices[2 * vt1_2];
+    double cy = d->rescaled_vertices[2 * vt1_2 + 1];
+#endif
+
+    unsigned long int aix = d->integer_vertices[2 * vt1_0];
+    unsigned long int aiy = d->integer_vertices[2 * vt1_0 + 1];
+
+    unsigned long int bix = d->integer_vertices[2 * vt1_1];
+    unsigned long int biy = d->integer_vertices[2 * vt1_1 + 1];
+
+    unsigned long int cix = d->integer_vertices[2 * vt1_2];
+    unsigned long int ciy = d->integer_vertices[2 * vt1_2 + 1];
+
+    /* loop over the 3 neighbours of this triangle */
+    for (int j = 0; j < 3; ++j) {
+      int ngb = d->triangles[i].neighbours[j];
+      /* skip potential dummy neighbours, since they have an invalid vertex
+         that will break the Delaunay test. */
+      if (ngb > 2) {
+        int i0 = d->triangles[i].index_in_neighbour[j];
+
+        /* check the mutual neighbour relations */
+        if (d->triangles[ngb].neighbours[i0] != i) {
+          fprintf(stderr, "Wrong neighbour!\n");
+          fprintf(stderr, "Triangle %i: %i %i %i\n", i, vt1_0, vt1_1, vt1_2);
+          fprintf(stderr, "Neighbours: %i %i %i\n",
+                  d->triangles[i].neighbours[0], d->triangles[i].neighbours[1],
+                  d->triangles[i].neighbours[2]);
+          fprintf(stderr, "Index in neighbour: %i %i %i\n",
+                  d->triangles[i].index_in_neighbour[0],
+                  d->triangles[i].index_in_neighbour[1],
+                  d->triangles[i].index_in_neighbour[2]);
+          fprintf(stderr, "Neighbour triangle %i: %i %i %i\n", ngb,
+                  d->triangles[ngb].vertices[0], d->triangles[ngb].vertices[1],
+                  d->triangles[ngb].vertices[2]);
+          fprintf(
+              stderr, "Neighbours: %i %i %i\n", d->triangles[ngb].neighbours[0],
+              d->triangles[ngb].neighbours[1], d->triangles[ngb].neighbours[2]);
+          fprintf(stderr, "Index in neighbour: %i %i %i\n",
+                  d->triangles[ngb].index_in_neighbour[0],
+                  d->triangles[ngb].index_in_neighbour[1],
+                  d->triangles[ngb].index_in_neighbour[2]);
+          abort();
+        }
+
+        /* check the neighbour index information */
+        if (d->triangles[ngb].index_in_neighbour[i0] != j) {
+          fprintf(stderr, "Wrong neighbour!\n");
+          fprintf(stderr, "Triangle %i: %i %i %i\n", i, vt1_0, vt1_1, vt1_2);
+          fprintf(stderr, "Neighbours: %i %i %i\n",
+                  d->triangles[i].neighbours[0], d->triangles[i].neighbours[1],
+                  d->triangles[i].neighbours[2]);
+          fprintf(stderr, "Index in neighbour: %i %i %i\n",
+                  d->triangles[i].index_in_neighbour[0],
+                  d->triangles[i].index_in_neighbour[1],
+                  d->triangles[i].index_in_neighbour[2]);
+          fprintf(stderr, "Neighbour triangle %i: %i %i %i\n", ngb,
+                  d->triangles[ngb].vertices[0], d->triangles[ngb].vertices[1],
+                  d->triangles[ngb].vertices[2]);
+          fprintf(
+              stderr, "Neighbours: %i %i %i\n", d->triangles[ngb].neighbours[0],
+              d->triangles[ngb].neighbours[1], d->triangles[ngb].neighbours[2]);
+          fprintf(stderr, "Index in neighbour: %i %i %i\n",
+                  d->triangles[ngb].index_in_neighbour[0],
+                  d->triangles[ngb].index_in_neighbour[1],
+                  d->triangles[ngb].index_in_neighbour[2]);
+          abort();
+        }
+
+        /* now get the vertex that is not shared between the triangle and this
+           neighbour and make sure it is not in the triangle's circumcircle */
+        int vt2_0 = d->triangles[ngb].vertices[i0];
+
+#ifdef DELAUNAY_NONEXACT
+        double dx = d->rescaled_vertices[2 * vt2_0];
+        double dy = d->rescaled_vertices[2 * vt2_0 + 1];
+        double test = geometry_in_sphere(ax, ay, bx, by, cx, cy, dx, dy);
+#else
+        double test = -1.;
+#endif
+
+        unsigned long dix = d->integer_vertices[2 * vt2_0];
+        unsigned long diy = d->integer_vertices[2 * vt2_0 + 1];
+
+        int testi = geometry_in_circle_sphere(&d->geometry, aix, aiy, bix, biy,
+                                              cix, ciy, dix, diy);
+        if (test > 0. || testi > 0) {
+          fprintf(stderr, "Wrong triangle!\n");
+          fprintf(stderr, "Triangle %i: %i (%g %g) %i (%g %g) %i (%g %g)\n", i,
+                  vt1_0, d->vertices[2 * vt1_0], d->vertices[2 * vt1_0 + 1],
+                  vt1_1, d->vertices[2 * vt1_1], d->vertices[2 * vt1_1 + 1],
+                  vt1_2, d->vertices[2 * vt1_2], d->vertices[2 * vt1_2 + 1]);
+          fprintf(stderr, "Opposite vertex: %i (%g %g)\n", vt2_0,
+                  d->vertices[2 * vt2_0], d->vertices[2 * vt2_0 + 1]);
+          fprintf(stderr, "Test result: %g\n", test);
+#ifdef DELAUNAY_NONEXACT
+          fprintf(stderr, "Orientation: %g\n",
+                  geometry_orient(ax, ay, bx, by, cx, cy));
+#endif
+          abort();
+        }
+      }
+    }
+  }
+
+  /* Loop over all vertex_triangle elements and check that they indeed link
+     to triangles that contain their respective vertex */
+  for (int i = 0; i < d->vertex_index; ++i) {
+    int t = d->vertex_triangles[i];
+    int vi = d->vertex_triangle_index[i];
+    if (d->triangles[t].vertices[vi] != i) {
+      fprintf(stderr, "Wrong vertex-triangle connection!");
+      abort();
+    }
+  }
+}
+
+/**
+ * @brief Consolidate the Delaunay tessellation. This signals the end of the
+ * addition of normal vertices. All vertices added after this point are
+ * considered to be ghost vertices.
+ *
+ * This function will also enable running delaunay_update_search_radii() and
+ * will make it possible to construct a Voronoi grid based on the tessellation.
+ *
+ * @param d Delaunay tessellation.
+ */
+inline static void delaunay_consolidate(struct delaunay* restrict d) {
+  /* perform a consistency test if enabled */
+  delaunay_check_tessellation(d);
 }
 
 /**

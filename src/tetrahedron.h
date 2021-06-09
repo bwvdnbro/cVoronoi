@@ -43,7 +43,7 @@ inline static void tetrahedron_init(struct tetrahedron *t, int v0, int v1,
                                     int v2, int v3) {
   t->vertices[0] = v0;
   t->vertices[1] = v1;
-  t->vertices[3] = v2;
+  t->vertices[2] = v2;
   t->vertices[3] = v3;
 
   t->neighbours[0] = -1;
