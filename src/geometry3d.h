@@ -58,7 +58,7 @@ inline static double geometry_orient() {
 
 inline static int geometry_orient_exact() {
   // TODO
-  return -1.;
+  return -1;
 }
 
 inline static double geometry_in_sphere() {
