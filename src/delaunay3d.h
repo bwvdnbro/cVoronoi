@@ -116,6 +116,7 @@ struct delaunay {
 inline static void delaunay_check_tessellation(struct delaunay* d);
 inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
                                       double y, double z);
+inline static void delaunay_add_vertex(struct delaunay* restrict d, int v);
 inline static int delaunay_new_tetrahedron(struct delaunay* restrict d);
 inline static int delaunay_free_indices_queue_pop(struct delaunay* restrict d);
 
@@ -311,7 +312,7 @@ inline static void delaunay_init_vertex(struct delaunay* restrict d,
   /* initialise the search radii to the largest possible value */
   d->search_radii[v] = DBL_MAX;
 
-  delaunay_log("Initialized new vertex with index %i", d->vertex_index);
+  delaunay_log("Initialized new vertex with index %i", v);
 }
 
 /**
@@ -356,6 +357,32 @@ inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
 
 inline static void delaunay_add_local_vertex(struct delaunay* restrict d, int v,
                                              double x, double y, double z) {
+  delaunay_assert(v < d->vertex_end && d->vertex_start <= v);
+  delaunay_init_vertex(d, v, x, y, z);
+  delaunay_log("Adding local vertex with position %g %g %g", x, y, z);
+  delaunay_add_vertex(d, v);
+}
+
+inline static void delaunay_add_new_vertex(struct delaunay* restrict d,
+                                           double x, double y, double z) {
+  int v = delaunay_new_vertex(d, x, y, z);
+  delaunay_log("Created new vertex with position %g %g %g", x, y, z);
+  delaunay_add_vertex(d, v);
+}
+
+/**
+ * @brief Add a new vertex to the tessellation.
+ *
+ * This function locates the tetrahedron in the current tessellation that
+ * contains the new vertex. Depending on the case (see below) new tetrahedra are
+ * added to the tessellation and some are removed.
+ *
+ * TODO cases
+ *
+ * @param d Delaunay tessellation.
+ * @param v Index of new vertex
+ */
+inline static void delaunay_add_vertex(struct delaunay* restrict d, int v) {
   // TODO
 }
 

@@ -127,7 +127,7 @@ static inline void update_paths(int loop, double *vertices) {
 int main() {
   /* seed the random generator with the most random seed ever */
   srand(42);
-  int count[3] = {10, 10, 1};
+  int count[3] = {2, 2, 2};
   double dim[3] = {1., 1., 1.};
   struct cell c;
   cell_init(&c, count, 1., dim);
