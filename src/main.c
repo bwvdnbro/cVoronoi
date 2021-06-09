@@ -41,6 +41,8 @@
    compiler warning caused by the use of this non-standard function. */
 #define _GNU_SOURCE
 
+#include <math.h>
+
 #include "cell.h"
 
 /**
@@ -141,7 +143,7 @@ int main() {
   cell_print_tesselations(&c, vor_filename, del_filename);
 
   /* Lloyd's relaxation */
-  for (int loop = 1; loop <= 5; ++loop) {
+  for (int loop = 1; loop <= 50; ++loop) {
     printf("Relaxation loop %i\n", loop);
     cell_lloyd_relax_vertices(&c);
     sprintf(vor_filename, "vtest%03i.txt", loop);

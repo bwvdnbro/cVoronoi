@@ -5,6 +5,9 @@
 #ifndef CVORONOI_DELAUNAY_H
 #define CVORONOI_DELAUNAY_H
 
+#include <stdlib.h>
+#include <stdio.h>
+
 #include "dimensionality.h"
 
 /*! @brief Activate extensive log output. */

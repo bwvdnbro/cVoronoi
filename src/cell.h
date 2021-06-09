@@ -6,6 +6,8 @@
 #define CVORONOI_CELL_H
 
 #include <float.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "delaunay.h"
 #include "dimensionality.h"
@@ -177,7 +179,7 @@ static inline void cell_construct_local_delaunay(struct cell *c) {
   for (int i = 0; i < c->count; ++i) {
     int j = c->r_sort_lists[4][i];
     delaunay_add_local_vertex(&c->d, j, c->vertices[3 * j],
-                              c->vertices[3 * j + 1]);
+                              c->vertices[3 * j + 1], c->vertices[3 * j + 2]);
   }
 
   /* we are done adding the original vertices. We need to consolidate the

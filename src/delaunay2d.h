@@ -30,8 +30,6 @@
 
 #include <float.h>
 #include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
 
 #include "geometry.h"
 #include "hydro_space.h"
@@ -1168,7 +1166,7 @@ inline static void delaunay_add_vertex(struct delaunay* restrict d, int v) {
 }
 
 inline static void delaunay_add_local_vertex(struct delaunay* restrict d, int v,
-                                             double x, double y) {
+                                             double x, double y, double z) {
   delaunay_assert(v < d->vertex_end && d->vertex_start <= v);
   delaunay_init_vertex(d, v, x, y);
   delaunay_log("Adding local vertex with position %g %g", x, y);

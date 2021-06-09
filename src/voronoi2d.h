@@ -30,8 +30,6 @@
 
 #include <string.h>
 
-#include "voronoi2d.h"
-
 /**
  * @brief Voronoi grid.
  *
