@@ -131,6 +131,7 @@ inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
 inline static void delaunay_add_vertex(struct delaunay* restrict d, int v);
 inline static int delaunay_new_tetrahedron(struct delaunay* restrict d);
 inline static int delaunay_free_indices_queue_pop(struct delaunay* restrict d);
+inline static int delaunay_tetrahedron_queue_pop(struct delaunay* restrict d);
 inline static void delaunay_append_tetrahedron_containing_vertex(
     struct delaunay* d, int t);
 inline static int delaunay_find_tetrahedra_containing_vertex(struct delaunay* d,
@@ -140,6 +141,7 @@ inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, int* t);
 inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v, int* t,
                                          int n);
 inline static void delaunay_check_tetrahedra(struct delaunay* d);
+inline static void delaunay_check_tetrahedron(struct delaunay* d, int t);
 
 /**
  * @brief Initialize the Delaunay tessellation.
@@ -398,6 +400,12 @@ inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
   return d->vertex_index++;
 }
 
+/**
+ * @brief Add a local (non ghost) vertex at the given index.
+ * @param d Delaunay tessellation
+ * @param v Index to add vertex at
+ * @param x, y, z Position of vertex
+ */
 inline static void delaunay_add_local_vertex(struct delaunay* restrict d, int v,
                                              double x, double y, double z) {
   delaunay_assert(v < d->vertex_end && d->vertex_start <= v);
@@ -406,6 +414,11 @@ inline static void delaunay_add_local_vertex(struct delaunay* restrict d, int v,
   delaunay_add_vertex(d, v);
 }
 
+/**
+ * @brief Add a new (ghost) vertex.
+ * @param d Delaunay tessellation
+ * @param x, y, z Position of vertex
+ */
 inline static void delaunay_add_new_vertex(struct delaunay* restrict d,
                                            double x, double y, double z) {
   int v = delaunay_new_vertex(d, x, y, z);
@@ -414,7 +427,7 @@ inline static void delaunay_add_new_vertex(struct delaunay* restrict d,
 }
 
 /**
- * @brief Add a new vertex to the tessellation.
+ * @brief Finalize adding a new vertex to the tessellation.
  *
  * This function locates the tetrahedron in the current tessellation that
  * contains the new vertex. Depending on the case (see below) new tetrahedra are
@@ -452,6 +465,10 @@ inline static void delaunay_add_vertex(struct delaunay* restrict d, int v) {
 
   /* Now check all tetrahedra in de queue */
   delaunay_check_tetrahedra(d);
+
+  /* perform sanity checks if enabled */
+  delaunay_check_tessellation(d);
+  delaunay_log("Passed checks after inserting vertex %i", v);
 }
 
 inline static int delaunay_find_tetrahedra_containing_vertex(
@@ -476,7 +493,31 @@ inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v, int* t,
   // TODO
 }
 
+/**
+ * @brief Check the Delaunay criterion for tetrahedra in the queue until the
+ * queue is empty.
+ * @param d Delaunay triangulation
+ */
 inline static void delaunay_check_tetrahedra(struct delaunay* d) {
+  int t = delaunay_tetrahedron_queue_pop(d);
+  while (t >= 0) {
+    delaunay_check_tetrahedron(d, t);
+    t = delaunay_tetrahedron_queue_pop(d);
+  }
+}
+
+/**
+ * @brief Check the Delaunay criterion for the given tetrahedron.
+ *
+ * Per convention, we assume this check was triggered by inserting the final
+ * vertex of this tetrahedron, so only one check is required.
+ * If this check fails, this function also performs the necessary flips. All
+ * new tetrahedra created by this function are also pushed to the queue for
+ * checking.
+ * @param d Delaunay triangulation
+ * @param t The tetrahedron to check.
+ */
+inline static void delaunay_check_tetrahedron(struct delaunay* d, int t) {
   // TODO
 }
 
