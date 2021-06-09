@@ -477,6 +477,7 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
    * containing the current vertex */
   d->tetrahedra_containing_vertex_index = 0;
   // TODO
+  return 1;
   return d->tetrahedra_containing_vertex_index;
 }
 
