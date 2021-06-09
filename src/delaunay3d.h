@@ -67,20 +67,38 @@ struct delaunay {
    *  expanded. */
   int tetrahedron_size;
 
-  /*! @brief Queue of triangles that need checking during the incremental
+  /*! @brief Lifo queue of tetrahedra that need checking during the incremental
    *  construction algorithm. After a new vertex has been added, all new
-   *  triangles are added to this queue and are tested to see if the
+   *  tetrahedra are added to this queue and are tested to see if the
    *  Delaunay criterion (empty circumcircles) still holds. New triangles
    *  created when flipping invalid triangles are also added to the queue. */
-  int* queue;
+  int* tetrahedron_queue;
 
-  /*! @brief Next available index in the queue. Determines both the actual size
-   *  of the queue as the first element that will be popped from the queue. */
-  int queue_index;
+  /*! @brief Next available index in the tetrahedron_queue. Determines both the
+   * actual size of the tetrahedron_queue as the first element that will be
+   * popped from the tetrahedron_queue. */
+  int tetrahedron_q_index;
 
-  /*! @brief Current size of the queue in memory. If queue_size matches
-   *  queue_index, the memory buffer is full and needs to be expanded. */
-  int queue_size;
+  /*! @brief Current size of the tetrahedron_queue in memory. If
+   * tetrahedron_q_size matches tetrahedron_q_index, the memory buffer
+   * is full and needs to be expanded. */
+  int tetrahedron_q_size;
+
+  /*! @brief Lifo queue of free spots in the tetrahedra array. Sometimes 3
+   * tetrahedra can be split into 2 new ones. This leaves a free spot in the
+   * array.
+   */
+  int* free_indices_queue;
+
+  /*! @brief Next available index in de free_indices_queue. Determines both the
+   * actual size of the free_indices_queue as the first element that will be
+   * popped from the free_indices_queue. */
+  int free_indices_q_index;
+
+  /*! @brief Current size of the free_indices_queue in memory. If
+   * free_indices_q_size matches free_indices_q_index, the memory buffer
+   * is full and needs to be expanded. */
+  int free_indices_q_size;
 
   /*! @brief Index of the last triangle that was accessed. Used as initial
    *  guess for the triangle that contains the next vertex that will be added.
@@ -95,13 +113,11 @@ struct delaunay {
 };
 
 /* Forward declarations */
-
-inline static void delaunay_check_tessellation(struct delaunay *d);
-
+inline static void delaunay_check_tessellation(struct delaunay* d);
 inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
                                       double y, double z);
-
 inline static int delaunay_new_tetrahedron(struct delaunay* restrict d);
+inline static int delaunay_free_indices_queue_pop(struct delaunay* restrict d);
 
 /**
  * @brief Initialize the Delaunay tessellation.
@@ -146,12 +162,17 @@ inline static void delaunay_init(struct delaunay* restrict d,
   d->tetrahedron_index = 0;
   d->tetrahedron_size = tetrahedron_size;
 
-  /* allocate memory for the queue (note that the queue size of 10 was chosen
-     arbitrarily, and a proper value should be chosen based on performance
-     measurements) */
-  d->queue = (int*)malloc(10 * sizeof(int));
-  d->queue_index = 0;
-  d->queue_size = 10;
+  /* allocate memory for the tetrahedron_queue (note that the tetrahedron_queue
+     size of 10 was chosen arbitrarily, and a proper value should be chosen
+     based on performance measurements) */
+  d->tetrahedron_queue = (int*)malloc(10 * sizeof(int));
+  d->tetrahedron_q_index = 0;
+  d->tetrahedron_q_size = 10;
+
+  /* allocate memory for the free_indices_queue */
+  d->free_indices_queue = (int*)malloc(10 * sizeof(int));
+  d->tetrahedron_q_index = 0;
+  d->tetrahedron_q_size = 10;
 
   /* determine the size of a box large enough to accommodate the entire
    * simulation volume and all possible ghost vertices required to deal with
@@ -229,13 +250,21 @@ inline static void delaunay_init(struct delaunay* restrict d,
    * adding new points to the tesselation */
   d->last_tetrahedron = first_tetrahedron;
 
-  /* Perform potential log output and sanity checks */
+  /* Perform sanity checks */
   delaunay_check_tessellation(d);
   delaunay_log("Passed post init check");
 }
 
 inline static void delaunay_destroy(struct delaunay* restrict d) {
-  // TODO
+  free(d->vertices);
+#ifdef DELAUNAY_NONEXACT
+  free(d->rescaled_vertices);
+#endif
+  free(d->integer_vertices);
+  free(d->search_radii);
+  free(d->tetrahedra);
+  free(d->tetrahedron_queue);
+  geometry_destroy(&d->geometry);
 }
 
 inline static void delaunay_init_vertex(struct delaunay* restrict d,
@@ -331,17 +360,59 @@ inline static void delaunay_add_local_vertex(struct delaunay* restrict d, int v,
 }
 
 inline static int delaunay_new_tetrahedron(struct delaunay* restrict d) {
-  /* TODO: check for empty space from three to two flips... */
-
-  /* Check that we still have tetrahedrons available */
+  /* check whether there is a free spot somewhere in the array */
+  int index = delaunay_free_indices_queue_pop(d);
+  if (index >= 0) {
+    return index;
+  }
+  /* Else: check that we still have space for tetrahedrons available */
   if (d->tetrahedron_index == d->tetrahedron_size) {
     d->tetrahedron_size <<= 1;
     d->tetrahedra = (struct tetrahedron*)realloc(
         d->tetrahedra, d->tetrahedron_size * sizeof(struct tetrahedron));
   }
-
   /* return and then increase */
   return d->tetrahedron_index++;
+}
+
+/**
+ * @brief Add the given index to the queue of free indices in the tetrahedra
+ * array.
+ *
+ * @param d Delaunay tessellation.
+ * @param idx New free index.
+ */
+inline static void delaunay_free_index_enqueue(struct delaunay* restrict d, int idx) {
+  /* make sure there is sufficient space in the queue */
+  if (d->free_indices_q_index == d->free_indices_q_size) {
+    /* there isn't: increase the size of the queue with a factor 2. */
+    d->free_indices_q_size <<= 1;
+    d->free_indices_queue = (int*)realloc(d->free_indices_queue, d->free_indices_q_size * sizeof(int));
+  }
+  delaunay_log("Enqueuing free index %i", idx);
+  /* add the triangle to the queue and advance the queue index */
+  d->free_indices_queue[d->free_indices_q_index] = idx;
+  ++d->free_indices_q_index;
+}
+
+/**
+ * @brief Pop a free index in the tetrahedra array from the end of the queue.
+ *
+ * If no more indices are queued, this function returns a negative value.
+ *
+ * Note that the returned index is effectively removed from the queue
+ * and will be overwritten by subsequent calls to delaunay_free_index_enqueue().
+ *
+ * @param d Delaunay tessellation.
+ * @return Index of the next triangle to test, or -1 if the queue is empty.
+ */
+inline static int delaunay_free_indices_queue_pop(struct delaunay* restrict d) {
+  if (d->free_indices_q_index > 0) {
+    --d->free_indices_q_index;
+    return d->free_indices_queue[d->free_indices_q_index];
+  } else {
+    return -1;
+  }
 }
 
 inline static void delaunay_consolidate(struct delaunay* restrict d) {
