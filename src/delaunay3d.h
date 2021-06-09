@@ -409,12 +409,14 @@ inline static int delaunay_new_tetrahedron(struct delaunay* restrict d) {
  * @param d Delaunay tessellation.
  * @param idx New free index.
  */
-inline static void delaunay_free_index_enqueue(struct delaunay* restrict d, int idx) {
+inline static void delaunay_free_index_enqueue(struct delaunay* restrict d,
+                                               int idx) {
   /* make sure there is sufficient space in the queue */
   if (d->free_indices_q_index == d->free_indices_q_size) {
     /* there isn't: increase the size of the queue with a factor 2. */
     d->free_indices_q_size <<= 1;
-    d->free_indices_queue = (int*)realloc(d->free_indices_queue, d->free_indices_q_size * sizeof(int));
+    d->free_indices_queue = (int*)realloc(d->free_indices_queue,
+                                          d->free_indices_q_size * sizeof(int));
   }
   delaunay_log("Enqueuing free index %i", idx);
   /* add the triangle to the queue and advance the queue index */
@@ -442,8 +444,50 @@ inline static int delaunay_free_indices_queue_pop(struct delaunay* restrict d) {
   }
 }
 
+/**
+ * @brief Add the given tetrahedron to the queue of tetrahedra that need
+ * checking.
+ *
+ * @param d Delaunay tessellation.
+ * @param t Tetrahedron index.
+ */
+inline static void delaunay_tetrahedron_enqueue(struct delaunay* restrict d,
+                                                int t) {
+  /* make sure there is sufficient space in the queue */
+  if (d->tetrahedron_q_index == d->tetrahedron_q_size) {
+    /* there isn't: increase the size of the queue with a factor 2. */
+    d->tetrahedron_q_size <<= 1;
+    d->tetrahedron_queue =
+        (int*)realloc(d->tetrahedron_queue, d->tetrahedron_size * sizeof(int));
+  }
+  delaunay_log("Enqueuing tetrahedron %i", t);
+  /* add the triangle to the queue and advance the queue index */
+  d->tetrahedron_queue[d->tetrahedron_q_index] = t;
+  ++d->tetrahedron_q_index;
+}
+
+/**
+ * @brief Pop the next tetrahedron to check from the end of the queue.
+ *
+ * If no more tetrahedrons are queued, this function returns a negative value.
+ * Note that the returned triangle index is effectively removed from the queue
+ * and will be overwritten by subsequent calls to delaunay_tetrahedron_enqueue().
+ *
+ * @param d Delaunay tessellation.
+ * @return Index of the next triangle to test, or -1 if the queue is empty.
+ */
+inline static int delaunay_tetrahedron_queue_pop(struct delaunay* restrict d) {
+  if (d->tetrahedron_q_index > 0) {
+    --d->tetrahedron_q_index;
+    return d->tetrahedron_queue[d->tetrahedron_q_index];
+  } else {
+    return -1;
+  }
+}
+
 inline static void delaunay_consolidate(struct delaunay* restrict d) {
-  // TODO
+  /* perform a consistency test if enabled */
+  delaunay_check_tessellation(d);
 }
 
 inline static void delaunay_print_tessellation(
