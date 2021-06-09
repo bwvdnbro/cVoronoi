@@ -100,6 +100,18 @@ struct delaunay {
    * is full and needs to be expanded. */
   int free_indices_q_size;
 
+  /*! @brief Array of tetrahedra containing the current vertex */
+  int* tetrahedra_containing_vertex;
+
+  /*! @brief Next index in the array of tetrahedra containing the current
+   * vertex. This is also the number of tetrahedra containing the current
+   * vertex. */
+  int tetrahedra_containing_vertex_index;
+
+  /*! @brief Size of the array of tetrahedra containing the current vertex in
+   * memory. */
+  int tetrahedra_containing_vertex_size;
+
   /*! @brief Index of the last triangle that was accessed. Used as initial
    *  guess for the triangle that contains the next vertex that will be added.
    *  If vertices are added in some sensible order (e.g. in Peano-Hilbert curve
@@ -119,6 +131,15 @@ inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
 inline static void delaunay_add_vertex(struct delaunay* restrict d, int v);
 inline static int delaunay_new_tetrahedron(struct delaunay* restrict d);
 inline static int delaunay_free_indices_queue_pop(struct delaunay* restrict d);
+inline static void delaunay_append_tetrahedron_containing_vertex(
+    struct delaunay* d, int t);
+inline static int delaunay_find_tetrahedra_containing_vertex(struct delaunay* d,
+                                                             const int v);
+inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t);
+inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, int* t);
+inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v, int* t,
+                                         int n);
+inline static void delaunay_check_tetrahedra(struct delaunay* d);
 
 /**
  * @brief Initialize the Delaunay tessellation.
@@ -174,6 +195,12 @@ inline static void delaunay_init(struct delaunay* restrict d,
   d->free_indices_queue = (int*)malloc(10 * sizeof(int));
   d->tetrahedron_q_index = 0;
   d->tetrahedron_q_size = 10;
+
+  /* allocate memory for the array of tetrahedra containing the current vertex
+   * Initial size is 10, may grow a lot for degenerate cases... */
+  d->tetrahedra_containing_vertex = (int*)malloc(10 * sizeof(int));
+  d->tetrahedra_containing_vertex_index = 0;
+  d->tetrahedra_containing_vertex_size = 10;
 
   /* determine the size of a box large enough to accommodate the entire
    * simulation volume and all possible ghost vertices required to deal with
@@ -266,6 +293,22 @@ inline static void delaunay_destroy(struct delaunay* restrict d) {
   free(d->tetrahedra);
   free(d->tetrahedron_queue);
   geometry_destroy(&d->geometry);
+}
+
+inline static int delaunay_new_tetrahedron(struct delaunay* restrict d) {
+  /* check whether there is a free spot somewhere in the array */
+  int index = delaunay_free_indices_queue_pop(d);
+  if (index >= 0) {
+    return index;
+  }
+  /* Else: check that we still have space for tetrahedrons available */
+  if (d->tetrahedron_index == d->tetrahedron_size) {
+    d->tetrahedron_size <<= 1;
+    d->tetrahedra = (struct tetrahedron*)realloc(
+        d->tetrahedra, d->tetrahedron_size * sizeof(struct tetrahedron));
+  }
+  /* return and then increase */
+  return d->tetrahedron_index++;
 }
 
 inline static void delaunay_init_vertex(struct delaunay* restrict d,
@@ -377,29 +420,64 @@ inline static void delaunay_add_new_vertex(struct delaunay* restrict d,
  * contains the new vertex. Depending on the case (see below) new tetrahedra are
  * added to the tessellation and some are removed.
  *
- * TODO cases
+ * Cases:
+ * 1. Point is fully inside a tetrahedron. In this case, this tetrahedron will
+ *    be replaced by 4 new tetrahedra.
+ * 2. Point is on face between two tetrahedra. In this case, these two will be
+ *    replaced by 6 new ones.
+ * 3. Point is on edge of N tetrahedra. These N tetrahedra will be replaced by
+ *    2N new ones.
  *
  * @param d Delaunay tessellation.
  * @param v Index of new vertex
  */
 inline static void delaunay_add_vertex(struct delaunay* restrict d, int v) {
+    int number_of_tetrahedra = delaunay_find_tetrahedra_containing_vertex(d, v);
+
+  if (number_of_tetrahedra == 1) {
+    // normal case: split 'tetrahedra[0]' into 4 new tetrahedra
+    delaunay_one_to_four_flip(d, v, d->tetrahedra_containing_vertex[0]);
+  } else if (number_of_tetrahedra == 2) {
+    // point on face: replace the 2 tetrahedra with 6 new ones
+    delaunay_two_to_six_flip(d, v, d->tetrahedra_containing_vertex);
+  } else if (number_of_tetrahedra > 2) {
+    // point on edge: replace the N tetrahedra with 2N new ones
+    delaunay_n_to_2n_flip(d, v, d->tetrahedra_containing_vertex,
+                          number_of_tetrahedra);
+  } else {
+    fprintf(stderr, "Unknown case of number of tetrahedra: %i!\n",
+            number_of_tetrahedra);
+    abort();
+  }
+
+  /* Now check all tetrahedra in de queue */
+  delaunay_check_tetrahedra(d);
+}
+
+inline static int delaunay_find_tetrahedra_containing_vertex(
+    struct delaunay* restrict d, const int v) {
+  /* Before we do anything: reset the index in the array of tetrahedra
+   * containing the current vertex */
+  d->tetrahedra_containing_vertex_index = 0;
+  // TODO
+  return d->tetrahedra_containing_vertex_index;
+}
+
+inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t) {
   // TODO
 }
 
-inline static int delaunay_new_tetrahedron(struct delaunay* restrict d) {
-  /* check whether there is a free spot somewhere in the array */
-  int index = delaunay_free_indices_queue_pop(d);
-  if (index >= 0) {
-    return index;
-  }
-  /* Else: check that we still have space for tetrahedrons available */
-  if (d->tetrahedron_index == d->tetrahedron_size) {
-    d->tetrahedron_size <<= 1;
-    d->tetrahedra = (struct tetrahedron*)realloc(
-        d->tetrahedra, d->tetrahedron_size * sizeof(struct tetrahedron));
-  }
-  /* return and then increase */
-  return d->tetrahedron_index++;
+inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, int* t) {
+  // TODO
+}
+
+inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v, int* t,
+                                         int n) {
+  // TODO
+}
+
+inline static void delaunay_check_tetrahedra(struct delaunay* d) {
+  // TODO
 }
 
 /**
@@ -471,7 +549,8 @@ inline static void delaunay_tetrahedron_enqueue(struct delaunay* restrict d,
  *
  * If no more tetrahedrons are queued, this function returns a negative value.
  * Note that the returned triangle index is effectively removed from the queue
- * and will be overwritten by subsequent calls to delaunay_tetrahedron_enqueue().
+ * and will be overwritten by subsequent calls to
+ * delaunay_tetrahedron_enqueue().
  *
  * @param d Delaunay tessellation.
  * @return Index of the next triangle to test, or -1 if the queue is empty.
@@ -483,6 +562,26 @@ inline static int delaunay_tetrahedron_queue_pop(struct delaunay* restrict d) {
   } else {
     return -1;
   }
+}
+
+/**
+ * @brief Append a tetrahedron containing the current vertex to the array.
+ * @param d Delaunay tesselation
+ * @param t The tetrahedron containing the current vertex.
+ */
+inline static void delaunay_append_tetrahedron_containing_vertex(
+    struct delaunay* d, const int t) {
+  /* Enough space? */
+  if (d->tetrahedra_containing_vertex_index ==
+      d->tetrahedra_containing_vertex_size) {
+    d->tetrahedra_containing_vertex_size <<= 1;
+    d->tetrahedra_containing_vertex =
+        (int*)realloc(d->tetrahedra_containing_vertex,
+                      d->tetrahedra_containing_vertex_size * sizeof(int));
+  }
+  /* Append and increase index for next tetrahedron */
+  d->tetrahedra_containing_vertex[d->tetrahedra_containing_vertex_index] = t;
+  d->tetrahedra_containing_vertex_index++;
 }
 
 inline static void delaunay_consolidate(struct delaunay* restrict d) {
