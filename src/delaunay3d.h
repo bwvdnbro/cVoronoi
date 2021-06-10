@@ -162,7 +162,7 @@ struct delaunay {
  * this tetrahedron (these dummy tetrahedra themselves have an invalid tip
  * vertex and are therefore simply placeholders).
  *
- * @param d Delaunay tesselation.
+ * @param d Delaunay tessellation.
  * @param hs Spatial extents of the simulation box.
  * @param vertex_size Initial size of the vertex array.
  * @param tetrahedron_size Initial size of the tetrahedra array.
@@ -284,7 +284,7 @@ inline static void delaunay_init(struct delaunay* restrict d,
   /* TODO: Setup vertex-tetrahedra links... */
 
   /* Set pointer to last created tetrahedron, this will be our first guess when
-   * adding new points to the tesselation */
+   * adding new points to the tessellation */
   d->last_tetrahedron = first_tetrahedron;
 
   /* Perform sanity checks */
@@ -492,7 +492,7 @@ inline static void delaunay_add_vertex(struct delaunay* restrict d, int v) {
  * @brief Find tetrahedra containing the given vertex
  * The tetrahedra are stored in d->tetrahedra_containing_vertex
  *
- * @param d Delaunay tesselation
+ * @param d Delaunay tessellation
  * @param v The vertex
  * @return The number of tetrahedra containing the given vertex.
  */
@@ -701,7 +701,7 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
  * The first new tetrahedron replaces the original tetrahedron, while the three
  * extra new tetrahedra are added to the list.
  *
- * @param d Delaunay tesselation
+ * @param d Delaunay tessellation
  * @param v New vertex to insert.
  * @param t Tetrahedron to replace.
  */
@@ -810,7 +810,7 @@ inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, int* t) {
  * new neighbour indices are set automatically by the way the new tetrahedra are
  * constructed.
  *
- * @param d Delaunay tesselation
+ * @param d Delaunay tessellation
  * @param v The new vertex
  * @param t The tetrahedra to replace
  * @param n The number of tetrahedra to replace
@@ -1131,7 +1131,7 @@ inline static int delaunay_three_to_two_flip(struct delaunay* restrict d,
 /**
  * @brief Check the Delaunay criterion for tetrahedra in the queue until the
  * queue is empty.
- * @param d Delaunay triangulation
+ * @param d Delaunay tessellation
  * @param v The new vertex that might cause invalidation of tetrahedra.
  */
 inline static void delaunay_check_tetrahedra(struct delaunay* d, int v) {
@@ -1172,7 +1172,7 @@ inline static void delaunay_check_tetrahedra(struct delaunay* d, int v) {
  * If this check fails, this function also performs the necessary flips. All
  * new tetrahedra created by this function are also pushed to the queue for
  * checking.
- * @param d Delaunay triangulation
+ * @param d Delaunay tessellation
  * @param t The tetrahedron to check.
  * @param v The new vertex that might cause invalidation of the tetrahedron.
  * @return Index of freed tetrahedron, or negative if no tetrahedra are freed
@@ -1417,7 +1417,7 @@ inline static int delaunay_tetrahedron_queue_pop(struct delaunay* restrict d) {
 
 /**
  * @brief Append a tetrahedron containing the current vertex to the array.
- * @param d Delaunay tesselation
+ * @param d Delaunay tessellation
  * @param t The tetrahedron containing the current vertex.
  */
 inline static void delaunay_append_tetrahedron_containing_vertex(
