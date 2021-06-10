@@ -29,6 +29,10 @@ struct tetrahedron {
   /*! @brief Index of this tetrahedron in the neighbour list of its neighbours.
    * */
   int index_in_neighbour[4];
+
+  /*! @brief Indicates whether or not a tetrahedron is active (or has been
+   * invalidated) */
+  int active;
 };
 
 /**
@@ -55,6 +59,32 @@ inline static void tetrahedron_init(struct tetrahedron *t, int v0, int v1,
   t->index_in_neighbour[1] = -1;
   t->index_in_neighbour[2] = -1;
   t->index_in_neighbour[3] = -1;
+
+  t->active = 1;
+}
+
+/**
+ * @brief Invalidate the given tetrahedron (set all values to nonsensical
+ * negative values)
+ * @param t Tetrahedron
+ */
+inline static void tetrahedron_invalidate(struct tetrahedron *restrict t) {
+  t->vertices[0] = -1;
+  t->vertices[1] = -1;
+  t->vertices[2] = -1;
+  t->vertices[3] = -1;
+
+  t->neighbours[0] = -1;
+  t->neighbours[1] = -1;
+  t->neighbours[2] = -1;
+  t->neighbours[3] = -1;
+
+  t->index_in_neighbour[0] = -1;
+  t->index_in_neighbour[1] = -1;
+  t->index_in_neighbour[2] = -1;
+  t->index_in_neighbour[3] = -1;
+
+  t->active = 0;
 }
 
 /**
