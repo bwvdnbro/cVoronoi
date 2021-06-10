@@ -132,6 +132,8 @@ inline static void delaunay_add_vertex(struct delaunay* restrict d, int v);
 inline static int delaunay_new_tetrahedron(struct delaunay* restrict d);
 inline static int delaunay_free_indices_queue_pop(struct delaunay* restrict d);
 inline static int delaunay_tetrahedron_queue_pop(struct delaunay* restrict d);
+inline static void delaunay_tetrahedron_enqueue(struct delaunay* restrict d,
+                                                int t);
 inline static void delaunay_append_tetrahedron_containing_vertex(
     struct delaunay* d, int t);
 inline static int delaunay_find_tetrahedra_containing_vertex(struct delaunay* d,
@@ -195,8 +197,8 @@ inline static void delaunay_init(struct delaunay* restrict d,
 
   /* allocate memory for the free_indices_queue */
   d->free_indices_queue = (int*)malloc(10 * sizeof(int));
-  d->tetrahedron_q_index = 0;
-  d->tetrahedron_q_size = 10;
+  d->free_indices_q_index = 0;
+  d->free_indices_q_size = 10;
 
   /* allocate memory for the array of tetrahedra containing the current vertex
    * Initial size is 10, may grow a lot for degenerate cases... */
@@ -674,6 +676,30 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
   return d->tetrahedra_containing_vertex_index;
 }
 
+/**
+ * @brief Replace the given tetrahedron with four new ones by inserting the
+ * given new vertex.
+ *
+ * @image html newvoronoicell_one_to_four_flip.png
+ *
+ * The original tetrahedron is positively oriented, and hence its vertices are
+ * ordered as shown in the figure. We construct four new tetrahedra by replacing
+ * one of the four original vertices with the new vertex. If we keep the
+ * ordering of the vertices, then the new tetrahedra will also be positively
+ * oriented. The new neighbour relations can be easily deduced from the figure,
+ * and the new index relations follow automatically from the way we construct
+ * the new tetrahedra.
+ *
+ * For clarity, the common faces of the new tetrahedra are marked in green in
+ * the figure.
+ *
+ * The first new tetrahedron replaces the original tetrahedron, while the three
+ * extra new tetrahedra are added to the list.
+ *
+ * @param d Delaunay tesselation
+ * @param v New vertex to insert.
+ * @param t Tetrahedron to replace.
+ */
 inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t) {
   delaunay_log("Flipping tetrahedron %i to 4 new ones.", t);
 
@@ -723,12 +749,182 @@ inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t) {
   delaunay_tetrahedron_enqueue(d, t3);
 }
 
+/**
+ * @brief Replace the given two tetrahedra with six new ones by inserting the
+ * given new vertex.
+ *
+ * @image html newvoronoicell_two_to_six_flip.png
+ *
+ * The two positively oriented tetrahedra (0123) and (0134) are replaced with
+ * six new ones by replacing the common triangle vertices one at a time: (0125),
+ * (0523), (5123), (0154), (0534), and (5134). The new neighbour relations can
+ * be easily deduced from the figure, while the new neighbour indices follow
+ * automatically from the way we set up the tetrahedra.
+ *
+ * @param d Delaunay tessellation
+ * @param v The new vertex
+ * @param t Tetrahedra to replace
+ */
 inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, int* t) {
   // TODO
 }
 
+/**
+ * @brief Replace the given @f$n@f$ tetrahedra with @f$2n@f$ new ones by
+ * inserting the given new vertex.
+ *
+ * @image html newvoronoicell_n_to_2n_flip.png
+ *
+ * The @f$n@f$ tetrahedra
+ * (v0 v@f$(n+1)@f$ v1 v@f$(n)@f$),
+ * @f$...@f$,
+ * (v@f$(i-1)@f$ v@f$(n+1)@f$ v@f$(i)@f$ v@f$(n)@f$),
+ * @f$...@f$,
+ * (v@f$(n-1)@f$ v@f$(n+1)@f$ v0 v@f$(n)@f$)
+ * are replaced with the @f$2n@f$ tetrahedra
+ * (v0 v@f$(n+2)@f$ v1 v@f$(n)@f$),
+ * (v0 v@f$(n+1)@f$ v1 v@f$(n+2)@f$),
+ * @f$...@f$,
+ * (v@f$(i-1)@f$ v@f$(n+2)@f$ v@f$(i)@f$ v@f$(n)@f$),
+ * (v@f$(i-1)@f$ v@f$(n+1)@f$ v@f$(i)@f$ v@f$(n+2)@f$),
+ * @f$...@f$,
+ * (v@f$(n-1)@f$ v@f$(n+2)@f$ v0 v@f$(n)@f$),
+ * (v@f$(n-1)@f$ v@f$(n+1)@f$ v0 v@f$(n+2)@f$).
+ *
+ * The new neighbour relations can easily be deduced from the figure, while the
+ * new neighbour indices are set automatically by the way the new tetrahedra are
+ * constructed.
+ *
+ * @param d Delaunay tesselation
+ * @param v The new vertex
+ * @param t The tetrahedra to replace
+ * @param n The number of tetrahedra to replace
+ */
 inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v, int* t,
                                          int n) {
+  // TODO
+}
+
+/**
+ * @brief Replace the given two tetrahedra with three new tetrahedra.
+ *
+ * @image html newvoronoicell_two_to_three_flip.png
+ *
+ * The two positively oriented tetrahedra (v0 v1 v2 v3) and (v0 v1 v3 v4) (that
+ * share the red face in the figure) are
+ * replaced with three new positively oriented tetrahedra (that share the green
+ * faces): (v0 v1 v2 v4), (v0 v4 v2 v3), and (v4 v1 v2 v3).
+ *
+ * Before the flip, t0 has ngb0, ngb3 and ngb4 as neighbours, while t1 has ngb1,
+ * ngb2 and ngb5 as neighbours. After the flip, t'0 has ngb4 and ngb5 as
+ * neighbours, t'1 has ngb3 and ngb4 as neighbours, and t'2 has ngb0 and ngb1
+ * as neighbours.
+ *
+ * We first figure out the indices of the common triangle vertices v0, v1 and v3
+ * in both tetrahedra. Once we know these, it is very straigthforward to match
+ * each index to one of these three vertices (requiring that t0 is positively
+ * oriented). We can then get the actual vertices, neighbours and neighbour
+ * indices and construct the new tetrahedra.
+ *
+ * @param d Delaunay tessellation
+ * @param t0 First tetrahedron
+ * @param t1 Second tetrahedron
+ * @param top0 Index of the vertex of the first tetrahedron opposite the second
+ * tetrahedron.
+ * @param top1 Index of the vertex of the second tetrahedron opposite the first
+ * tetrahedron.
+ */
+inline static void delaunay_two_to_three_flip(struct delaunay* restrict d,
+                                              int t0, int t1, int top0,
+                                              int top1) {
+  // TODO
+}
+
+/**
+ * @brief Replace the given four tetrahedra with four new tetrahedra.
+ *
+ * @image html newvoronoicell_four_to_four_flip.png
+ *
+ * The four positively oriented tetrahedra (v0 v1 v2 v3), (v0 v1 v3 v4),
+ * (v0 v1 v5 v2), and (v0 v5 v1 v4),
+ * that share the edge (v0 v1) are replaced by four new positively oriented
+ * tetrahedra that share the edge (v3 v5) (dashed line in figure):
+ * (v0 v3 v5 v2), (v1 v5 v3 v2), (v0 v5 v3 v4), and (v1 v3 v5 v4).
+ *
+ * The original red shared faces are hence replaced by the new green shared
+ * faces in the figure; the blue shared faces will also be shared by the new
+ * tetrahedra.
+ *
+ * Originally, t0 has ngb0 and ngb3 as neighbours, t1 has ngb1 and ngb2 as
+ * neighbours, t2 has ngb4 and ngb7 as neighbours, and t3 has ngb5 and ngb6 as
+ * neighbours. After the flip, t'0 has ngb3 and ngb7 as neighbours, t'1 has ngb0
+ * and ngb4 as neighbours, t'2 has ngb2 and ngb6 as neighbours, and t'3 has ngb1
+ * and ngb5 as neighbours.
+ *
+ * The tetrahedra should be given to this routine in the expected order: t0
+ * should have t1 and t2 as neighbours, while t3 should be a common neighbour of
+ * t1 and t2, but not of t3.
+ *
+ * The first thing we do is figure out how the internal vertex indices of the
+ * four tetrahedra map to the names in the figure. We do this by identifying the
+ * indices of the common axis vertices v0 and v1 in all tetrahedra, and the
+ * index of v2 in t0. Once we know v0, v1 and v2 in t0, we can deduce the index
+ * of v3 in in t0, and require that (v0 v1 v2 v3) is positively oriented (if
+ * not, we swap v0 and v1 in all tetrahedra so that it is).
+ *
+ * Once the indices have been mapped, it is straightforward to deduce the
+ * actual vertices, neighbours and neighbour indices, and we can simply
+ * construct the new tetrahedra based on the figure.
+ *
+ * @param d Delaunay tessellation
+ * @param t0 First tetrahedron.
+ * @param t1 Second tetrahedron.
+ * @param t2 Third tetrahedron.
+ * @param t3 Fourth tetrahedron.
+ */
+inline static void delaunay_four_to_four_flip(struct delaunay* restrict d,
+                                              int t0, int t1, int t2, int t3) {
+  // TODO
+}
+
+/**
+ * @brief Replace the given three tetrahedra with two new tetrahedra.
+ *
+ * @image html newvoronoicell_three_to_two_flip.png
+ *
+ * The three positively oriented tetrahedra (v0 v1 v2 v4), (v0 v4 v2 v3), and
+ * (v4 v1 v2 v3) (with the red common faces in the figure) are
+ * replaced with two new positively oriented tetrahedra (with a green common
+ * face in the figure): (v0 v1 v2 v3) and (v0 v1 v3 v4).
+ *
+ * Originally, t0 has ngb4 and ngb5 as neighbours, t1 has ngb2 and ngb3 as
+ * neighbours, and t2 has ngb0 and ngb1 as neighbours. After the flip, t'0 has
+ * ngb0, ngb3 and ngb4 as neighbours, while t'1 has ngb1, ngb2 and ngb5 as
+ * neighbours.
+ *
+ * We first find the indices of the common axis (v2 v4) in all three tetrahedra,
+ * plus the index of v0 (the third common vertex of t0 and t1) in t0. Once we
+ * have these we also know the index of v1 in t0, and we can find out which of
+ * the two axis indices corresponds to v2 and which to v4 by requiring that the
+ * four indices are a positively oriented permutation of 0123. Once this is
+ * done, it is very straightforward to obtain the other indices in the other
+ * tetrahedra. We can then get the actual vertices, neighbours and neighbour
+ * indices, and construct the two new tetrahedra.
+ *
+ * Note that because this flip removes a tetrahedron, it will free up a spot in
+ * the tetrahedra vector. Since removing the tetrahedron from that vector would
+ * be very expensive (since it requires a reshuffle of all tetrahedra behind it
+ * and requires us to update the neighbour relations for all of these
+ * tetrahedra), we just leave it in and keep an extra stack of free spots in the
+ * tetrahedra array, which can be filled by other flips.
+ *
+ * @param d Delaunay tessellation
+ * @param t0 First tetrahedron.
+ * @param t1 Second tetrahedron.
+ * @param t2 Third tetrahedron.
+ */
+inline static void delaunay_three_to_two_flip(struct delaunay* restrict d,
+                                              int t0, int t1, int t2) {
   // TODO
 }
 
@@ -746,7 +942,8 @@ inline static void delaunay_check_tetrahedra(struct delaunay* d) {
 }
 
 /**
- * @brief Check the Delaunay criterion for the given tetrahedron.
+ * @brief Check if the given tetrahedron satisfies the empty circumsphere
+ * criterion that marks it as a Delaunay tetrahedron.
  *
  * Per convention, we assume this check was triggered by inserting the final
  * vertex of this tetrahedron, so only one check is required.
@@ -757,7 +954,7 @@ inline static void delaunay_check_tetrahedra(struct delaunay* d) {
  * @param t The tetrahedron to check.
  */
 inline static void delaunay_check_tetrahedron(struct delaunay* d, int t) {
-  // TODO
+
 }
 
 /**
