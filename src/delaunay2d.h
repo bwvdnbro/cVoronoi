@@ -835,7 +835,7 @@ inline static void delaunay_add_vertex(struct delaunay* restrict d, int v) {
   /* check wheter we are in the normal (flag = 1) or degenerate (flag = 2)
      case */
   if (flag == 1) {
-    /* normal case: split t0 into 3 new triangles
+    /* normal case: split t0 into 3 new triangles */
 
     /* retrieve the properties of the old triangle */
     int tv0 = d->triangles[t0].vertices[0];
