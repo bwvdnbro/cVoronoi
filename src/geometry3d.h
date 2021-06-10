@@ -21,7 +21,7 @@ struct geometry {
   mpz_t s1x, s1y, s1z, s2x, s2y, s2z, s3x, s3y, s3z, s4x, s4y, s4z;
 
   /*! @brief Temporary variables used to store intermediate results. */
-  mpz_t tmp1, tmp2;
+  mpz_t tmp1, tmp2, ab, bc, cd, da, ac, bd;
 
   /*! @brief Temporary variable used to store final exact results, before their
    *  sign is evaluated and returned as a finite precision integer. */
@@ -39,7 +39,8 @@ inline static void geometry_init(struct geometry* restrict g) {
   mpz_inits(g->aix, g->aiy, g->aiz, g->bix, g->biy, g->biz, g->cix, g->ciy,
             g->ciz, g->dix, g->diy, g->diz, g->eix, g->eiy, g->eiz, g->s1x,
             g->s1y, g->s1z, g->s2x, g->s2y, g->s2z, g->s3x, g->s3y, g->s3z,
-            g->s4x, g->s4y, g->s4z, g->tmp1, g->tmp2, g->result, NULL);
+            g->s4x, g->s4y, g->s4z, g->tmp1, g->tmp2, g->ab, g->bc, g->cd,
+            g->da, g->ac, g->bd, g->result, NULL);
 }
 
 /**
@@ -51,7 +52,8 @@ inline static void geometry_destroy(struct geometry* restrict g) {
   mpz_clears(g->aix, g->aiy, g->aiz, g->bix, g->biy, g->biz, g->cix, g->ciy,
              g->ciz, g->dix, g->diy, g->diz, g->eix, g->eiy, g->eiz, g->s1x,
              g->s1y, g->s1z, g->s2x, g->s2y, g->s2z, g->s3x, g->s3y, g->s3z,
-             g->s4x, g->s4y, g->s4z, g->tmp1, g->tmp2, g->result, NULL);
+             g->s4x, g->s4y, g->s4z, g->tmp1, g->tmp2, g->ab, g->bc, g->cd,
+             g->da, g->ac, g->bd, g->result, NULL);
 }
 
 inline static double geometry_orient() {
@@ -145,8 +147,100 @@ inline static int geometry_in_sphere_exact(
     const unsigned long cz, const unsigned long dx, const unsigned long dy,
     const unsigned long dz, const unsigned long ex, const unsigned long ey,
     const unsigned long ez) {
-  // TODO
-  return -1;
+  /* store the input coordinates into the temporary large integer variables */
+  mpz_set_ui(g->aix, ax);
+  mpz_set_ui(g->aiy, ay);
+  mpz_set_ui(g->aiz, az);
+
+  mpz_set_ui(g->bix, bx);
+  mpz_set_ui(g->biy, by);
+  mpz_set_ui(g->biz, bz);
+
+  mpz_set_ui(g->cix, cx);
+  mpz_set_ui(g->ciy, cy);
+  mpz_set_ui(g->ciz, cz);
+
+  mpz_set_ui(g->dix, dx);
+  mpz_set_ui(g->diy, dy);
+  mpz_set_ui(g->diz, dz);
+
+  mpz_set_ui(g->eix, ex);
+  mpz_set_ui(g->eiy, ey);
+  mpz_set_ui(g->eiz, ez);
+
+  /* compute large integer relative coordinates */
+  mpz_sub(g->s1x, g->aix, g->eix);
+  mpz_sub(g->s1y, g->aiy, g->eiy);
+  mpz_sub(g->s1z, g->aiz, g->eiz);
+
+  mpz_sub(g->s2x, g->bix, g->eix);
+  mpz_sub(g->s2y, g->biy, g->eiy);
+  mpz_sub(g->s2z, g->biz, g->eiz);
+
+  mpz_sub(g->s3x, g->cix, g->eix);
+  mpz_sub(g->s3y, g->ciy, g->eiy);
+  mpz_sub(g->s3z, g->ciz, g->eiz);
+
+  mpz_sub(g->s4x, g->dix, g->eix);
+  mpz_sub(g->s4y, g->diy, g->eiy);
+  mpz_sub(g->s4z, g->diz, g->eiz);
+
+  /* compute intermediate values */
+  mpz_mul(g->ab, g->s1x, g->s2y);
+  mpz_submul(g->ab, g->s2x, g->s1y);
+
+  mpz_mul(g->bc, g->s2x, g->s3y);
+  mpz_submul(g->bc, g->s3x, g->s2y);
+
+  mpz_mul(g->cd, g->s3x, g->s4y);
+  mpz_submul(g->cd, g->s4x, g->s3y);
+
+  mpz_mul(g->da, g->s4x, g->s1y);
+  mpz_submul(g->da, g->s1x, g->s4y);
+
+  mpz_mul(g->ac, g->s1x, g->s3y);
+  mpz_submul(g->ac, g->s3x, g->s1y);
+
+  mpz_mul(g->bd, g->s2x, g->s4y);
+  mpz_submul(g->bd, g->s4x, g->s2y);
+
+
+  /* compute the result in 4 steps */
+  mpz_set_ui(g->result, 0);
+
+  mpz_mul(g->tmp1, g->s4x, g->s4x);
+  mpz_addmul(g->tmp1, g->s4y, g->s4y);
+  mpz_addmul(g->tmp1, g->s4z, g->s4z);
+  mpz_mul(g->tmp2, g->s1z, g->bc);
+  mpz_submul(g->tmp2, g->s2z, g->ac);
+  mpz_addmul(g->tmp2, g->s3z, g->ab);
+  mpz_addmul(g->result, g->tmp1, g->tmp2);
+
+  mpz_mul(g->tmp1, g->s3x, g->s3x);
+  mpz_addmul(g->tmp1, g->s3y, g->s3y);
+  mpz_addmul(g->tmp1, g->s3z, g->s3z);
+  mpz_mul(g->tmp2, g->s4z, g->ab);
+  mpz_addmul(g->tmp2, g->s1z, g->bd);
+  mpz_addmul(g->tmp2, g->s2z, g->da);
+  mpz_submul(g->result, g->tmp1, g->tmp2);
+
+  mpz_mul(g->tmp1, g->s2x, g->s2x);
+  mpz_addmul(g->tmp1, g->s2y, g->s2y);
+  mpz_addmul(g->tmp1, g->s2z, g->s2z);
+  mpz_mul(g->tmp2, g->s3z, g->da);
+  mpz_addmul(g->tmp2, g->s4z, g->ac);
+  mpz_addmul(g->tmp2, g->s1z, g->cd);
+  mpz_addmul(g->result, g->tmp1, g->tmp2);
+
+  mpz_mul(g->tmp1, g->s1x, g->s1x);
+  mpz_addmul(g->tmp1, g->s1y, g->s1y);
+  mpz_addmul(g->tmp1, g->s1z, g->s1z);
+  mpz_mul(g->tmp2, g->s2z, g->cd);
+  mpz_submul(g->tmp2, g->s3z, g->bd);
+  mpz_addmul(g->tmp2, g->s4z, g->bc);
+  mpz_submul(g->result, g->tmp1, g->tmp2);
+
+  return mpz_sgn(g->result);
 }
 
 #endif  // CVORONOI_GEOMETRY3D_H

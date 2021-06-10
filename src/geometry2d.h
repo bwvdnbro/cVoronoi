@@ -189,9 +189,9 @@ inline static int geometry_orient_exact(
  * @param cx, cy Third point.
  * @param dx, dy Fourth point.
  */
-inline static double geometry_in_sphere_exact(double ax, double ay, double bx,
-                                              double by, double cx, double cy,
-                                              double dx, double dy) {
+inline static double geometry_in_sphere(double ax, double ay, double bx,
+                                        double by, double cx, double cy,
+                                        double dx, double dy) {
 
   /* the code below stays as close as possible to the implementation of the
      exact test below */
@@ -233,7 +233,7 @@ inline static double geometry_in_sphere_exact(double ax, double ay, double bx,
 }
 
 /**
- * @brief Arbitrary exact alternative for geometry_in_sphere_exact().
+ * @brief Arbitrary exact alternative for geometry_in_sphere().
  *
  * This function calculates exactly the same thing as the non-exact version, but
  * does so in an integer coordinate basis, using arbitrarily large integers.
@@ -244,7 +244,7 @@ inline static double geometry_in_sphere_exact(double ax, double ay, double bx,
  * @param g Geometry object (containing temporary variables that will be used).
  * @param ax, ay, bx, by, cx, cy, dx, dy Integer coordinates of the four points.
  */
-inline static int geometry_in_sphere(
+inline static int geometry_in_sphere_exact(
     struct geometry* restrict g, unsigned long int ax, unsigned long int ay,
     unsigned long int bx, unsigned long int by, unsigned long int cx,
     unsigned long int cy, unsigned long int dx, unsigned long int dy) {
