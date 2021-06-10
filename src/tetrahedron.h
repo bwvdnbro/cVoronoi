@@ -91,4 +91,18 @@ inline static void tetrahedron_swap_neighbours(struct tetrahedron *restrict t,
   tetrahedron_swap_neighbour(t, 3, n3, idx_in_n3);
 }
 
+/**
+ * @brief Find the index of ngb in t
+ * @param t Tetrahedron
+ * @param ngb Index of potential neighbour in delaunay tesselation
+ * @return Index of ngb in t or 4 if ngb is not a neighbour of t
+ */
+inline static int tetrahedron_is_neighbour(struct tetrahedron *restrict t,
+                                           int ngb) {
+  int i;
+  for (i = 0; i < 4 && t->neighbours[i] != ngb; i++) {
+  }
+  return i;
+}
+
 #endif  // CVORONOI_TETRAHEDRON_H

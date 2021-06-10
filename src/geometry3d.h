@@ -138,7 +138,13 @@ inline static double geometry_in_sphere() {
   return -1.;
 }
 
-inline static int geometry_in_sphere_exact() {
+inline static int geometry_in_sphere_exact(
+    struct geometry* restrict g, const unsigned long ax, const unsigned long ay,
+    const unsigned long az, const unsigned long bx, const unsigned long by,
+    const unsigned long bz, const unsigned long cx, const unsigned long cy,
+    const unsigned long cz, const unsigned long dx, const unsigned long dy,
+    const unsigned long dz, const unsigned long ex, const unsigned long ey,
+    const unsigned long ez) {
   // TODO
   return -1;
 }

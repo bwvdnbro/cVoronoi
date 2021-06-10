@@ -142,8 +142,8 @@ inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t);
 inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, int* t);
 inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v, int* t,
                                          int n);
-inline static void delaunay_check_tetrahedra(struct delaunay* d);
-inline static void delaunay_check_tetrahedron(struct delaunay* d, int t);
+inline static void delaunay_check_tetrahedra(struct delaunay* d, int v);
+inline static void delaunay_check_tetrahedron(struct delaunay* d, int t, int v);
 
 /**
  * @brief Initialize the Delaunay tessellation.
@@ -476,7 +476,7 @@ inline static void delaunay_add_vertex(struct delaunay* restrict d, int v) {
   }
 
   /* Now check all tetrahedra in de queue */
-  delaunay_check_tetrahedra(d);
+  delaunay_check_tetrahedra(d, v);
 
   /* perform sanity checks if enabled */
   delaunay_check_tessellation(d);
@@ -767,6 +767,8 @@ inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t) {
  */
 inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, int* t) {
   // TODO
+  fprintf(stderr, "Not implemented!");
+  abort();
 }
 
 /**
@@ -803,6 +805,8 @@ inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, int* t) {
 inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v, int* t,
                                          int n) {
   // TODO
+  fprintf(stderr, "Not implemented!");
+  abort();
 }
 
 /**
@@ -932,11 +936,12 @@ inline static void delaunay_three_to_two_flip(struct delaunay* restrict d,
  * @brief Check the Delaunay criterion for tetrahedra in the queue until the
  * queue is empty.
  * @param d Delaunay triangulation
+ * @param v The new vertex that might cause invalidation of tetrahedra.
  */
-inline static void delaunay_check_tetrahedra(struct delaunay* d) {
+inline static void delaunay_check_tetrahedra(struct delaunay* d, int v) {
   int t = delaunay_tetrahedron_queue_pop(d);
   while (t >= 0) {
-    delaunay_check_tetrahedron(d, t);
+    delaunay_check_tetrahedron(d, t, v);
     t = delaunay_tetrahedron_queue_pop(d);
   }
 }
@@ -947,14 +952,162 @@ inline static void delaunay_check_tetrahedra(struct delaunay* d) {
  *
  * Per convention, we assume this check was triggered by inserting the final
  * vertex of this tetrahedron, so only one check is required.
+ * -> TODO does this work?
  * If this check fails, this function also performs the necessary flips. All
  * new tetrahedra created by this function are also pushed to the queue for
  * checking.
  * @param d Delaunay triangulation
  * @param t The tetrahedron to check.
+ * @param v The new vertex that might cause invalidation of the tetrahedron.
  */
-inline static void delaunay_check_tetrahedron(struct delaunay* d, int t) {
+inline static void delaunay_check_tetrahedron(struct delaunay* d, const int t,
+                                              const int v) {
+  struct tetrahedron* tetrahedron = &d->tetrahedra[t];
+  const int v0 = tetrahedron->vertices[0];
+  const int v1 = tetrahedron->vertices[1];
+  const int v2 = tetrahedron->vertices[2];
+  const int v3 = tetrahedron->vertices[3];
 
+  /* Determine which vertex is the newly added vertex */
+  int top;
+  if (v == v0) {
+    top = 0;
+  } else if (v == v1) {
+    top = 1;
+  } else if (v == v2) {
+    top = 2;
+  } else if (v == v3) {
+    top = 3;
+  } else {
+    fprintf(stderr,
+            "Checking tetrahedron %i which does not contain the last added "
+            "vertex %i",
+            t, v);
+    abort();
+  }
+
+  /* Get neighbouring tetrahedron opposite of newly added vertex */
+  const int ngb = tetrahedron->neighbours[top];
+  const int idx_in_ngb = tetrahedron->index_in_neighbour[top];
+  /* Get the vertex in the neighbouring tetrahedron opposite of t */
+  const int v4 = d->tetrahedra[ngb].vertices[idx_in_ngb];
+
+  /* Get the coordinates of all vertices */
+#ifdef DELAUNAY_NONEXACT
+  // TODO
+#endif
+  const unsigned long aix = d->integer_vertices[3 * v0];
+  const unsigned long aiy = d->integer_vertices[3 * v0 + 1];
+  const unsigned long aiz = d->integer_vertices[3 * v0 + 2];
+
+  const unsigned long bix = d->integer_vertices[3 * v1];
+  const unsigned long biy = d->integer_vertices[3 * v1 + 1];
+  const unsigned long biz = d->integer_vertices[3 * v1 + 2];
+
+  const unsigned long cix = d->integer_vertices[3 * v2];
+  const unsigned long ciy = d->integer_vertices[3 * v2 + 1];
+  const unsigned long ciz = d->integer_vertices[3 * v2 + 2];
+
+  const unsigned long dix = d->integer_vertices[3 * v3];
+  const unsigned long diy = d->integer_vertices[3 * v3 + 1];
+  const unsigned long diz = d->integer_vertices[3 * v3 + 2];
+
+  const unsigned long eix = d->integer_vertices[3 * v4];
+  const unsigned long eiy = d->integer_vertices[3 * v4 + 1];
+  const unsigned long eiz = d->integer_vertices[3 * v4 + 2];
+
+  const int test =
+      geometry_in_sphere_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz, cix,
+                               ciy, ciz, dix, diy, diz, eix, eiy, eiz);
+  if (test < 0) {
+    delaunay_log("Tetrahedron %i was invalidated by adding vertex %i", t, v);
+    /* Figure out which flip is needed to restore the tetrahedra */
+    int tests[4] = {-1, -1, -1, -1};
+    if (top != 3) {
+      tests[0] = geometry_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy,
+                                       biz, cix, ciy, ciz, eix, eiy, eiz);
+    }
+    if (top != 2) {
+      tests[1] = geometry_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy,
+                                       biz, eix, eiy, eiz, dix, diy, diz);
+    }
+    if (top != 1) {
+      tests[2] = geometry_orient_exact(&d->geometry, aix, aiy, aiz, eix, eiy,
+                                       eiz, cix, ciy, ciz, dix, diy, diz);
+    }
+    if (top != 0) {
+      tests[3] = geometry_orient_exact(&d->geometry, eix, eiy, eiz, bix, biy,
+                                       biz, cix, ciy, ciz, dix, diy, diz);
+    }
+    int i;
+    for (i = 0; i < 4 && tests[i] < 0; ++i) {
+    }
+    if (i == 4) {
+      /* v4 inside sphere around v1, v2 and v4: need to do a 2 to 3 flip */
+      delaunay_log("Performing 2 to 3 flip with %i and %i", t, ngb);
+      delaunay_two_to_three_flip(d, t, ngb, top, idx_in_ngb);
+    } else if (tests[i] == 0) {
+      /* degenerate case: possible 4 to 4 flip needed. The line that connects v
+       * and v4 intersects an edge of the triangle formed by the other 3
+       * vertices of t. If that edge is shared by exactly 4 tetrahedra in total,
+       * the 2 neighbours are involved in the 4 to 4 flip. If it isn't, we
+       * cannot solve this situation now, it will be solved later by another
+       * flip. */
+
+      /* the non_axis point is simply the vertex not present in the relevant
+       * orientation test */
+      const int non_axis = 3 - i;
+      /* get the other involved neighbour of t */
+      const int other_ngb = d->tetrahedra[t].neighbours[non_axis];
+      /* get the index of 'new_vertex' in 'other_ngb', as the neighbour
+       * opposite that vertex is the other neighbour we need to check */
+      int idx_v_in_other_ngb;
+      for (idx_v_in_other_ngb = 0;
+           idx_v_in_other_ngb < 4 &&
+           d->tetrahedra[other_ngb].vertices[idx_v_in_other_ngb] != v;
+           idx_v_in_other_ngb++) {
+      }
+      const int other_ngbs_ngb =
+          d->tetrahedra[other_ngb].neighbours[idx_v_in_other_ngb];
+      /* check if other_ngbs_ngb is also a neighbour of ngb. */
+      int second_idx_in_ngb =
+          tetrahedron_is_neighbour(&d->tetrahedra[ngb], other_ngbs_ngb);
+      if (second_idx_in_ngb < 4) {
+        delaunay_log("4 to 4 flip between %i, %i, %i and %i possible!", t,
+                     other_ngb, ngb, other_ngbs_ngb);
+        delaunay_four_to_four_flip(d, t, other_ngb, ngb, other_ngbs_ngb);
+      } else {
+        delaunay_log("4 to 4 with %i and %i flip not possible!", t, ngb);
+      }
+    } else {
+      /* check that this is indeed the only case left */
+      delaunay_assert(tests[i] > 0);
+      /* Outside: possible 3 to 2 flip.
+       * The line that connects 'new_vertex' and 'v4' lies outside an edge of
+       * the triangle formed by the other 3 vertices of 'tetrahedron'. We need
+       * to check if the neighbouring tetrahedron opposite the non-edge point
+       * of that triangle is the same for 't' and 'ngb'. If it is, that is the
+       * third tetrahedron for the 3 to 2 flip. If it is not, we cannot solve
+       * this faulty situation now, but it will be solved by another flip later
+       * on */
+
+      /* the non_axis point is simply the vertex not present in the relevant
+       * orientation test */
+      const int non_axis = 3 - i;
+      /* get the other involved neighbour of t */
+      const int other_ngb = d->tetrahedra[t].neighbours[non_axis];
+      /* check if other_ngb is also a neigbour of ngb */
+      const int other_ngb_idx_in_ngb =
+          tetrahedron_is_neighbour(&d->tetrahedra[ngb], other_ngb);
+      if (other_ngb_idx_in_ngb < 4) {
+        delaunay_log("3 to 2 flip with %i, %i and %i possible!", t, ngb,
+                     other_ngb);
+        delaunay_three_to_two_flip(d, t, ngb, other_ngb);
+      } else {
+        delaunay_log("3 to 2 with %i and %i flip not possible!", t, ngb);
+      }
+    }
+  }
 }
 
 /**
