@@ -445,16 +445,26 @@ inline static void delaunay_add_new_vertex(struct delaunay* restrict d,
  * @param v Index of new vertex
  */
 inline static void delaunay_add_vertex(struct delaunay* restrict d, int v) {
-    int number_of_tetrahedra = delaunay_find_tetrahedra_containing_vertex(d, v);
+  int number_of_tetrahedra = delaunay_find_tetrahedra_containing_vertex(d, v);
 
   if (number_of_tetrahedra == 1) {
-    // normal case: split 'tetrahedra[0]' into 4 new tetrahedra
+    /* normal case: split 'd->tetrahedra_containing_vertex[0]' into 4 new
+     * tetrahedra */
+    delaunay_log("Vertex %i lies fully inside tetrahedron %i", v,
+                 d->tetrahedra_containing_vertex[0]);
     delaunay_one_to_four_flip(d, v, d->tetrahedra_containing_vertex[0]);
   } else if (number_of_tetrahedra == 2) {
-    // point on face: replace the 2 tetrahedra with 6 new ones
+    /* point on face: replace the 2 tetrahedra with 6 new ones */
+    delaunay_log("Vertex %i on the face between tetrahedra %i and %i", v,
+                 d->tetrahedra_containing_vertex[0],
+                 d->tetrahedra_containing_vertex[0]);
     delaunay_two_to_six_flip(d, v, d->tetrahedra_containing_vertex);
   } else if (number_of_tetrahedra > 2) {
-    // point on edge: replace the N tetrahedra with 2N new ones
+    /* point on edge: replace the N tetrahedra with 2N new ones */
+    delaunay_log(
+        "Vertex %i lies on the edge shared by tetrahedra %i, %i and %i", v,
+        d->tetrahedra_containing_vertex[0], d->tetrahedra_containing_vertex[1],
+        d->tetrahedra_containing_vertex[number_of_tetrahedra - 1]);
     delaunay_n_to_2n_flip(d, v, d->tetrahedra_containing_vertex,
                           number_of_tetrahedra);
   } else {
@@ -471,13 +481,196 @@ inline static void delaunay_add_vertex(struct delaunay* restrict d, int v) {
   delaunay_log("Passed checks after inserting vertex %i", v);
 }
 
+/**
+ * @brief Find tetrahedra containing the given vertex
+ * The tetrahedra are stored in d->tetrahedra_containing_vertex
+ *
+ * @param d Delaunay tesselation
+ * @param v The vertex
+ * @return The number of tetrahedra containing the given vertex.
+ */
 inline static int delaunay_find_tetrahedra_containing_vertex(
     struct delaunay* restrict d, const int v) {
   /* Before we do anything: reset the index in the array of tetrahedra
    * containing the current vertex */
   d->tetrahedra_containing_vertex_index = 0;
-  // TODO
-  return 1;
+
+  /* Get the last tetrahedron index */
+  int tetrahedron_idx = d->last_tetrahedron;
+  /* Get the coordinates of the test vertex */
+#ifdef DELAUNAY_NONEXACT
+  const double ex = d->vertices[3 * v];
+  const double ey = d->vertices[3 * v + 1];
+  const double ez = d->vertices[3 * v + 2];
+#endif
+  const unsigned long eix = d->integer_vertices[3 * v];
+  const unsigned long eiy = d->integer_vertices[3 * v + 1];
+  const unsigned long eiz = d->integer_vertices[3 * v + 2];
+
+  while (d->tetrahedra_containing_vertex_index == 0) {
+    const struct tetrahedron* tetrahedron = &d->tetrahedra[tetrahedron_idx];
+    const int v0 = tetrahedron->vertices[0];
+    const int v1 = tetrahedron->vertices[1];
+    const int v2 = tetrahedron->vertices[2];
+    const int v3 = tetrahedron->vertices[3];
+    /* Get the coordinates of the vertices of the tetrahedron */
+#ifdef DELAUNAY_NONEXACT
+    const double ax = d->vertices[3 * v0];
+    const double ay = d->vertices[3 * v0 + 1];
+    const double az = d->vertices[3 * v0 + 2];
+
+    const double bx = d->vertices[3 * v1];
+    const double by = d->vertices[3 * v1 + 1];
+    const double bz = d->vertices[3 * v1 + 2];
+
+    const double cx = d->vertices[3 * v2];
+    const double cy = d->vertices[3 * v2 + 1];
+    const double cz = d->vertices[3 * v2 + 2];
+
+    const double dx = d->vertices[3 * v3];
+    const double dy = d->vertices[3 * v3 + 1];
+    const double dz = d->vertices[3 * v3 + 2];
+#endif
+    const unsigned long aix = d->integer_vertices[3 * v0];
+    const unsigned long aiy = d->integer_vertices[3 * v0 + 1];
+    const unsigned long aiz = d->integer_vertices[3 * v0 + 2];
+
+    const unsigned long bix = d->integer_vertices[3 * v1];
+    const unsigned long biy = d->integer_vertices[3 * v1 + 1];
+    const unsigned long biz = d->integer_vertices[3 * v1 + 2];
+
+    const unsigned long cix = d->integer_vertices[3 * v2];
+    const unsigned long ciy = d->integer_vertices[3 * v2 + 1];
+    const unsigned long ciz = d->integer_vertices[3 * v2 + 2];
+
+    const unsigned long dix = d->integer_vertices[3 * v3];
+    const unsigned long diy = d->integer_vertices[3 * v3 + 1];
+    const unsigned long diz = d->integer_vertices[3 * v3 + 2];
+
+#ifdef DELAUNAY_CHECKS
+    /* made sure the tetrahedron is correctly oriented */
+    if (geometry_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz, cix,
+                              ciy, ciz, dix, diy, diz) >= 0) {
+      fprintf(stderr, "Incorrect orientation for tetrahedron %i!",
+              tetrahedron_idx);
+      abort();
+    }
+#endif
+    int non_axis_v_idx[2];
+    /* Check whether the point is inside or outside all four faces */
+    const int test_abce =
+        geometry_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz, cix,
+                              ciy, ciz, eix, eiy, eiz);
+    if (test_abce > 0) {
+      /* v outside face opposite of v3 */
+      tetrahedron_idx = tetrahedron->neighbours[3];
+      continue;
+    }
+    const int test_acde =
+        geometry_orient_exact(&d->geometry, aix, aiy, aiz, cix, ciy, ciz, dix,
+                              diy, diz, eix, eiy, eiz);
+    if (test_acde > 0) {
+      /* v outside face opposite of v1 */
+      tetrahedron_idx = tetrahedron->neighbours[1];
+      continue;
+    }
+    const int test_adbe =
+        geometry_orient_exact(&d->geometry, aix, aiy, aiz, dix, diy, diz, bix,
+                              biy, biz, eix, eiy, eiz);
+    if (test_adbe > 0) {
+      /* v outside face opposite of v2 */
+      tetrahedron_idx = tetrahedron->neighbours[2];
+      continue;
+    }
+    const int test_bdce =
+        geometry_orient_exact(&d->geometry, bix, biy, biz, dix, diy, diz, cix,
+                              ciy, ciz, eix, eiy, eiz);
+    if (test_bdce > 0) {
+      /* v outside face opposite of v0 */
+      tetrahedron_idx = tetrahedron->neighbours[0];
+      continue;
+    } else {
+      /* Point inside tetrahedron, check for degenerate cases */
+      delaunay_append_tetrahedron_containing_vertex(d, tetrahedron_idx);
+      if (test_abce == 0) {
+        non_axis_v_idx[d->tetrahedra_containing_vertex_index] = 3;
+        delaunay_append_tetrahedron_containing_vertex(
+            d, tetrahedron->neighbours[3]);
+      }
+      if (test_adbe == 0) {
+        non_axis_v_idx[d->tetrahedra_containing_vertex_index] = 2;
+        delaunay_append_tetrahedron_containing_vertex(
+            d, tetrahedron->neighbours[2]);
+      }
+      if (test_acde == 0) {
+        non_axis_v_idx[d->tetrahedra_containing_vertex_index] = 1;
+        delaunay_append_tetrahedron_containing_vertex(
+            d, tetrahedron->neighbours[1]);
+      }
+      if (test_bdce == 0) {
+        non_axis_v_idx[d->tetrahedra_containing_vertex_index] = 0;
+        delaunay_append_tetrahedron_containing_vertex(
+            d, tetrahedron->neighbours[0]);
+      }
+    }
+
+    if (d->tetrahedra_containing_vertex_index > 3) {
+      /* Impossible case, the vertex cannot simultaneously lie in this
+       * tetrahedron and 3 or more of its direct neighbours */
+      fprintf(stderr,
+              "Impossible scenario encountered while searching for tetrahedra "
+              "containing vertex %i!",
+              v);
+      abort();
+    }
+    if (d->tetrahedra_containing_vertex_index > 2) {
+      /* Vertex on edge of tetrahedron. This edge can be shared by any number of
+       * tetrahedra, of which we already know three. Find the other ones by
+       * rotating around this edge. */
+      const int non_axis_idx0 = non_axis_v_idx[0];
+      const int non_axis_idx1 = non_axis_v_idx[1];
+      int axis_idx0 = (non_axis_idx0 + 1) % 4;
+      if (axis_idx0 == non_axis_idx1) {
+        axis_idx0 = (axis_idx0 + 1) % 4;
+      }
+      const int axis_idx1 = 6 - axis_idx0 - non_axis_idx0 - non_axis_idx1;
+      delaunay_assert(
+          axis_idx0 != axis_idx1 && axis_idx0 != non_axis_idx0 &&
+          axis_idx0 != non_axis_idx1 && axis_idx1 != non_axis_idx0 &&
+          axis_idx1 != non_axis_idx1 && non_axis_idx0 != non_axis_idx1);
+      /* a0 and a1 are the vertices shared by all tetrahedra */
+      const int a0 = tetrahedron->vertices[axis_idx0];
+      const int a1 = tetrahedron->vertices[axis_idx1];
+      /* We now walk around the axis and add all tetrahedra to the list of
+       * tetrahedra containing v. */
+      const int last_t = d->tetrahedra_containing_vertex[1];
+      int next_t = d->tetrahedra_containing_vertex[2];
+      int next_vertex = tetrahedron->index_in_neighbour[non_axis_idx1];
+      /* We are going to add d->tetrahedra_containing_vertex[2] and
+       * d->tetrahedra_containing_vertex[1] back to the array of tetrahedra
+       * containing v, but now with all other tetrahedra that also share the
+       * edge in between, so make sure they are not added twice. */
+      d->tetrahedra_containing_vertex_index -= 2;
+      while (next_t != last_t) {
+        delaunay_append_tetrahedron_containing_vertex(d, next_t);
+        next_vertex = (next_vertex + 1) % 4;
+        if (d->tetrahedra[next_t].vertices[next_vertex] == a0 ||
+            d->tetrahedra[next_t].vertices[next_vertex] == a1) {
+          next_vertex = (next_vertex + 1) % 4;
+        }
+        if (d->tetrahedra[next_t].vertices[next_vertex] == a0 ||
+            d->tetrahedra[next_t].vertices[next_vertex] == a1) {
+          next_vertex = (next_vertex + 1) % 4;
+        }
+        delaunay_assert(d->tetrahedra[next_t].vertices[next_vertex] != a0 &&
+                        d->tetrahedra[next_t].vertices[next_vertex] != a1);
+
+        const int cur_vertex = next_vertex;
+        next_vertex = d->tetrahedra[next_t].index_in_neighbour[cur_vertex];
+        next_t = d->tetrahedra[next_t].neighbours[cur_vertex];
+      }
+    }
+  }
   return d->tetrahedra_containing_vertex_index;
 }
 

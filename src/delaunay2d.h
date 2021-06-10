@@ -687,7 +687,7 @@ inline static void delaunay_check_triangle(struct delaunay* restrict d, int t) {
   double dx = d->rescaled_vertices[2 * vt2_0];
   double dy = d->rescaled_vertices[2 * vt2_0 + 1];
 
-  double test = geometry_in_sphere(ax, ay, bx, by, cx, cy, dx, dy);
+  double test = geometry_in_sphere_exact(ax, ay, bx, by, cx, cy, dx, dy);
   delaunay_log("In circle: (%g %g) (%g %g) (%g %g) (%g %g) (%g) = %g", ax, ay,
                bx, by, cx, cy, dx, dy,
                geometry_orient(ax, ay, bx, by, cx, cy), test);
@@ -705,8 +705,8 @@ inline static void delaunay_check_triangle(struct delaunay* restrict d, int t) {
   unsigned long int dix = d->integer_vertices[2 * vt2_0];
   unsigned long int diy = d->integer_vertices[2 * vt2_0 + 1];
 
-  int testi = geometry_in_circle_sphere(&d->geometry, aix, aiy, bix, biy, cix,
-                                        ciy, dix, diy);
+  int testi =
+      geometry_in_sphere(&d->geometry, aix, aiy, bix, biy, cix, ciy, dix, diy);
 
 #ifdef DELAUNAY_NONEXACT
   delaunay_assert(test * testi >= 0);
@@ -1235,7 +1235,7 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
 #ifdef DELAUNAY_NONEXACT
         double dx = d->rescaled_vertices[2 * vt2_0];
         double dy = d->rescaled_vertices[2 * vt2_0 + 1];
-        double test = geometry_in_sphere(ax, ay, bx, by, cx, cy, dx, dy);
+        double test = geometry_in_sphere_exact(ax, ay, bx, by, cx, cy, dx, dy);
 #else
         double test = -1.;
 #endif
@@ -1243,8 +1243,8 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
         unsigned long dix = d->integer_vertices[2 * vt2_0];
         unsigned long diy = d->integer_vertices[2 * vt2_0 + 1];
 
-        int testi = geometry_in_circle_sphere(&d->geometry, aix, aiy, bix, biy,
-                                              cix, ciy, dix, diy);
+        int testi = geometry_in_sphere(&d->geometry, aix, aiy, bix, biy, cix,
+                                       ciy, dix, diy);
         if (test > 0. || testi > 0) {
           fprintf(stderr, "Wrong triangle!\n");
           fprintf(stderr, "Triangle %i: %i (%g %g) %i (%g %g) %i (%g %g)\n", i,
