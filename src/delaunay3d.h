@@ -675,7 +675,52 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
 }
 
 inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t) {
-  // TODO
+  delaunay_log("Flipping tetrahedron %i to 4 new ones.", t);
+
+  /* Extract necessary information */
+  const int vertices[4] = {
+      d->tetrahedra[t].vertices[0], d->tetrahedra[t].vertices[1],
+      d->tetrahedra[t].vertices[2], d->tetrahedra[t].vertices[3]};
+  const int ngbs[4] = {
+      d->tetrahedra[t].neighbours[0], d->tetrahedra[t].neighbours[1],
+      d->tetrahedra[t].neighbours[2], d->tetrahedra[t].neighbours[3]};
+  const int idx_in_ngbs[4] = {d->tetrahedra[t].index_in_neighbour[0],
+                              d->tetrahedra[t].index_in_neighbour[1],
+                              d->tetrahedra[t].index_in_neighbour[2],
+                              d->tetrahedra[t].index_in_neighbour[3]};
+
+  /* Replace t and create 3 new tetrahedra */
+  tetrahedron_init(&d->tetrahedra[t], vertices[0], vertices[1], vertices[2], v);
+  const int t1 = delaunay_new_tetrahedron(d);
+  tetrahedron_init(&d->tetrahedra[t1], vertices[0], vertices[1], v,
+                   vertices[3]);
+  const int t2 = delaunay_new_tetrahedron(d);
+  tetrahedron_init(&d->tetrahedra[t2], vertices[0], v, vertices[2],
+                   vertices[3]);
+  const int t3 = delaunay_new_tetrahedron(d);
+  tetrahedron_init(&d->tetrahedra[t3], v, vertices[1], vertices[2],
+                   vertices[3]);
+
+  /* update neighbour relations */
+  tetrahedron_swap_neighbours(&d->tetrahedra[t], t3, t2, t1, ngbs[3], 3, 3, 3,
+                              idx_in_ngbs[3]);
+  tetrahedron_swap_neighbours(&d->tetrahedra[t1], t3, t2, ngbs[2], t, 2, 2,
+                              idx_in_ngbs[2], 2);
+  tetrahedron_swap_neighbours(&d->tetrahedra[t2], t3, ngbs[1], t1, t, 1,
+                              idx_in_ngbs[1], 1, 1);
+  tetrahedron_swap_neighbours(&d->tetrahedra[t3], ngbs[0], t2, t1, t,
+                              idx_in_ngbs[0], 0, 0, 0);
+
+  tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[0]], idx_in_ngbs[0], t3, 0);
+  tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[1]], idx_in_ngbs[1], t2, 1);
+  tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[2]], idx_in_ngbs[2], t1, 2);
+  tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[3]], idx_in_ngbs[3], t, 3);
+
+  /* enqueue all new/updated triangles for delaunay checks */
+  delaunay_tetrahedron_enqueue(d, t);
+  delaunay_tetrahedron_enqueue(d, t1);
+  delaunay_tetrahedron_enqueue(d, t2);
+  delaunay_tetrahedron_enqueue(d, t3);
 }
 
 inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, int* t) {
