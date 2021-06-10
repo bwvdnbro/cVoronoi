@@ -84,13 +84,13 @@ struct delaunay {
   /*! @brief Tetrahedra that make up the tessellation. */
   struct tetrahedron* tetrahedra;
 
-  /*! @brief Next available index within the tetrahedron array. Corresponds to the
-   *  actual size of the tetrahedron array. */
+  /*! @brief Next available index within the tetrahedron array. Corresponds to
+   * the actual size of the tetrahedron array. */
   int tetrahedron_index;
 
-  /*! @brief Current size of the tetrahedron array in memory. If tetrahedron_size
-   *  matches tetrahedron_index, the memory buffer is full and needs to be
-   *  expanded. */
+  /*! @brief Current size of the tetrahedron array in memory. If
+   * tetrahedron_size matches tetrahedron_index, the memory buffer is full and
+   * needs to be expanded. */
   int tetrahedron_size;
 
   /*! @brief Lifo queue of tetrahedra that need checking during the incremental
@@ -139,9 +139,9 @@ struct delaunay {
   int tetrahedra_containing_vertex_size;
 
   /*! @brief Index of the last tetrahedron that was accessed. Used as initial
-   *  guess for the tetrahedron that contains the next vertex that will be added.
-   *  If vertices are added in some sensible order (e.g. in Peano-Hilbert curve
-   *  order) then this will greatly speed up the algorithm. */
+   *  guess for the tetrahedron that contains the next vertex that will be
+   * added. If vertices are added in some sensible order (e.g. in Peano-Hilbert
+   * curve order) then this will greatly speed up the algorithm. */
   int last_tetrahedron;
 
   /*! @brief Geometry variables. Auxiliary variables used by the exact integer
@@ -1026,7 +1026,7 @@ inline static void delaunay_four_to_four_flip(struct delaunay* restrict d,
  * @return The index of the freed tetrahedron.
  */
 inline static int delaunay_three_to_two_flip(struct delaunay* restrict d,
-                                              int t0, int t1, int t2) {
+                                             int t0, int t1, int t2) {
   /* get the common axis of the three tetrahedra */
   int axis[3][4];
   int num_axis = 0;
@@ -1178,7 +1178,7 @@ inline static void delaunay_check_tetrahedra(struct delaunay* d, int v) {
  * @return Index of freed tetrahedron, or negative if no tetrahedra are freed
  */
 inline static int delaunay_check_tetrahedron(struct delaunay* d, const int t,
-                                              const int v) {
+                                             const int v) {
   struct tetrahedron* tetrahedron = &d->tetrahedra[t];
   const int v0 = tetrahedron->vertices[0];
   const int v1 = tetrahedron->vertices[1];
@@ -1397,8 +1397,8 @@ inline static void delaunay_tetrahedron_enqueue(struct delaunay* restrict d,
  *
  * If no more active tetrahedrons are queued, this function returns a negative
  * value.
- * Note that the returned tetrahedron index is effectively removed from the queue
- * and will be overwritten by subsequent calls to
+ * Note that the returned tetrahedron index is effectively removed from the
+ * queue and will be overwritten by subsequent calls to
  * delaunay_tetrahedron_enqueue().
  *
  * @param d Delaunay tessellation.
@@ -1407,7 +1407,7 @@ inline static void delaunay_tetrahedron_enqueue(struct delaunay* restrict d,
 inline static int delaunay_tetrahedron_queue_pop(struct delaunay* restrict d) {
   int active = 0;
   int t;
-  while(!active && d->tetrahedron_q_index > 0){
+  while (!active && d->tetrahedron_q_index > 0) {
     --d->tetrahedron_q_index;
     t = d->tetrahedron_queue[d->tetrahedron_q_index];
     active = d->tetrahedra[t].active;
@@ -1466,6 +1466,10 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
       int t_ngb = d->tetrahedra[t0].neighbours[i];
       /* check neighbour relations */
       int idx_in_ngb0 = d->tetrahedra[t0].index_in_neighbour[i];
+      if (!d->tetrahedra[t_ngb].active) {
+        fprintf(stderr, "Tetrahedron %i has an inactive neighbour: %i", t0,
+                t_ngb);
+      }
       if (d->tetrahedra[t_ngb].neighbours[idx_in_ngb0] != t0) {
         fprintf(stderr, "Wrong neighbour!\n");
         fprintf(stderr, "Tetrahedron %i: %i %i %i %i\n", t0, vt0_0, vt0_1,
@@ -1495,8 +1499,45 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
                 d->tetrahedra[t_ngb].index_in_neighbour[3]);
         abort();
       }
-      /* TODO: check in_sphere criterion for vertex of t_ngb not shared with t0
-       */
+      if (t_ngb < 4) {
+        /* Don't check delaunayness for dummy neighbour tetrahedra */
+        continue;
+      }
+      /* check in-sphere criterion for delaunayness */
+      int vertex_to_check = d->tetrahedra[t_ngb].vertices[idx_in_ngb0];
+#ifdef DELAUNAY_NONEXACT
+      // TODO
+#endif
+      unsigned long int aix = d->integer_vertices[3 * vt0_0];
+      unsigned long int aiy = d->integer_vertices[3 * vt0_0 + 1];
+      unsigned long int aiz = d->integer_vertices[3 * vt0_0 + 2];
+
+      unsigned long int bix = d->integer_vertices[3 * vt0_1];
+      unsigned long int biy = d->integer_vertices[3 * vt0_1 + 1];
+      unsigned long int biz = d->integer_vertices[3 * vt0_1 + 2];
+
+      unsigned long int cix = d->integer_vertices[3 * vt0_2];
+      unsigned long int ciy = d->integer_vertices[3 * vt0_2 + 1];
+      unsigned long int ciz = d->integer_vertices[3 * vt0_2 + 2];
+
+      unsigned long int dix = d->integer_vertices[3 * vt0_3];
+      unsigned long int diy = d->integer_vertices[3 * vt0_3 + 1];
+      unsigned long int diz = d->integer_vertices[3 * vt0_3 + 2];
+
+      unsigned long int eix = d->integer_vertices[3 * vertex_to_check];
+      unsigned long int eiy = d->integer_vertices[3 * vertex_to_check + 1];
+      unsigned long int eiz = d->integer_vertices[3 * vertex_to_check + 2];
+
+      int test =
+          geometry_in_sphere_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz,
+                                   cix, ciy, ciz, dix, diy, diz, eix, eiy, eiz);
+      if (test < 0) {
+        fprintf(stderr, "Failed in-sphere test, value: %i!\n", test);
+        fprintf(stderr, "\tTetrahedron %i: %i %i %i %i\n", t0, vt0_0, vt0_1,
+                vt0_2, vt0_3);
+        fprintf(stderr, "\tOpposite vertex: %i\n", vertex_to_check);
+        abort();
+      }
     }
   }
 }
