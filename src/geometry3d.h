@@ -140,6 +140,21 @@ inline static double geometry_in_sphere() {
   return -1.;
 }
 
+/**
+ * @brief Check if the fifth given point is inside (-1) the circumsphere of the
+   * tetrahedron formed by the other four given points.
+   *
+   * It is assumed that the first four points are the vertices of a positively
+   * oriented tetrahedron, as defined by a negative return value of orient3d().
+   *
+   * If the fifth point is exactly on the circumsphere of the tetrahedron, this
+   * functions returns 0.
+   *
+ * @param g Geometry struct
+ * @param ax, ay, az, bx, by, bz, cx, cy, cz, dx, dy, dz, ex, ey, ez Coordinates
+ * of the vertices of the tetrahedron and the test point (e).
+ * @return -1, 0, or 1, depending on the outcome of the geometric test
+ */
 inline static int geometry_in_sphere_exact(
     struct geometry* restrict g, const unsigned long ax, const unsigned long ay,
     const unsigned long az, const unsigned long bx, const unsigned long by,
