@@ -1116,9 +1116,10 @@ inline static int delaunay_three_to_two_flip(struct delaunay* restrict d,
                              d->tetrahedra[t0].index_in_neighbour[v2_0]};
 
   /* Overwrite two new tetrahedra and free the third one. */
-  tetrahedron_invalidate(&d->tetrahedra[t2]);
   delaunay_tetrahedron_init(d, t0, vert[0], vert[1], vert[2], vert[3]);
   delaunay_tetrahedron_init(d, t1, vert[0], vert[1], vert[3], vert[4]);
+  delaunay_log("Deactivating tetrahedron %i", t2);
+  tetrahedron_deactivate(&d->tetrahedra[t2]);
 
   /* update neighbour relations */
   tetrahedron_swap_neighbours(&d->tetrahedra[t0], ngbs[0], ngbs[3], t1, ngbs[4],

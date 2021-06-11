@@ -64,11 +64,11 @@ inline static void tetrahedron_init(struct tetrahedron *t, int v0, int v1,
 }
 
 /**
- * @brief Invalidate the given tetrahedron (set all values to nonsensical
- * negative values)
+ * @brief Deactivates the given tetrahedron (set all values to nonsensical
+ * negative values) and sets the active flag to 0
  * @param t Tetrahedron
  */
-inline static void tetrahedron_invalidate(struct tetrahedron *restrict t) {
+inline static void tetrahedron_deactivate(struct tetrahedron *restrict t) {
   t->vertices[0] = -1;
   t->vertices[1] = -1;
   t->vertices[2] = -1;
