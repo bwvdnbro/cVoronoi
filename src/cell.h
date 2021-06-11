@@ -120,15 +120,15 @@ static inline void cell_init(struct cell *c, const int *count,
     for (int iy = 0; iy < count[1]; ++iy) {
       for (int iz = 0; iz < count[2]; ++iz) {
         c->vertices[index] =
-            (ix + 0.5 + 0.5 * pert * get_random_uniform_double()) *
+            (ix + 0.5 + pert * (get_random_uniform_double() - 0.5)) *
             (dim[0] / (double)count[0]);
         ++index;
         c->vertices[index] =
-            (iy + 0.5 + 0.5 * pert * get_random_uniform_double()) *
+            (iy + 0.5 + pert * (get_random_uniform_double() - 0.5)) *
             (dim[1] / (double)count[1]);
         ++index;
         c->vertices[index] =
-            (iz + 0.5 + 0.5 * pert * get_random_uniform_double()) *
+            (iz + 0.5 + pert * (get_random_uniform_double() - 0.5)) *
             (dim[2] / (double)count[2]);
         ++index;
       }

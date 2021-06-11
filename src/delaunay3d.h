@@ -16,6 +16,8 @@ inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
                                       double y, double z);
 inline static void delaunay_add_vertex(struct delaunay* restrict d, int v);
 inline static int delaunay_new_tetrahedron(struct delaunay* restrict d);
+inline static void delaunay_tetrahedron_init(struct delaunay* restrict d, int t,
+                                             int v0, int v1, int v2, int v3);
 inline static int delaunay_free_indices_queue_pop(struct delaunay* restrict d);
 inline static void delaunay_free_index_enqueue(struct delaunay* restrict d,
                                                int idx);
@@ -31,8 +33,7 @@ inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, int* t);
 inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v, int* t,
                                          int n);
 inline static void delaunay_check_tetrahedra(struct delaunay* d, int v);
-inline static int delaunay_check_tetrahedron(struct delaunay* d, const int t,
-                                             const int v);
+inline static int delaunay_check_tetrahedron(struct delaunay* d, int t, int v);
 inline static int positive_permutation(int a, int b, int c, int d);
 
 struct delaunay {
@@ -259,25 +260,25 @@ inline static void delaunay_init(struct delaunay* restrict d,
   int dummy2 = delaunay_new_tetrahedron(d); /* opposite of v2 */
   int dummy3 = delaunay_new_tetrahedron(d); /* opposite of v3 */
   int first_tetrahedron = delaunay_new_tetrahedron(d);
-  delaunay_log("Creating dummy tetrahedron %i: %i %i %i %i", dummy0, v1, v2, v3,
-               -1);
+  delaunay_log("Creating dummy tetrahedron at %i with vertices: %i %i %i %i",
+               dummy0, v1, v2, v3, -1);
   tetrahedron_init(&d->tetrahedra[dummy0], v1, v2, v3, -1);
-  tetrahedron_swap_neighbour(&d->tetrahedra[dummy0], 3, first_tetrahedron, 0);
-  delaunay_log("Creating dummy tetrahedron %i: %i %i %i %i", dummy1, v2, v0, v3,
-               -1);
+  delaunay_log("Creating dummy tetrahedron at %i with vertices: %i %i %i %i",
+               dummy1, v2, v0, v3, -1);
   tetrahedron_init(&d->tetrahedra[dummy1], v2, v0, v3, -1);
-  tetrahedron_swap_neighbour(&d->tetrahedra[dummy1], 3, first_tetrahedron, 1);
-  delaunay_log("Creating dummy tetrahedron %i: %i %i %i %i", dummy2, v3, v0, v1,
-               -1);
+  delaunay_log("Creating dummy tetrahedron at %i with vertices: %i %i %i %i",
+               dummy2, v3, v0, v1, -1);
   tetrahedron_init(&d->tetrahedra[dummy2], v3, v0, v1, -1);
-  tetrahedron_swap_neighbour(&d->tetrahedra[dummy2], 3, first_tetrahedron, 2);
-  delaunay_log("Creating dummy tetrahedron %i: %i %i %i %i", dummy3, v0, v2, v1,
-               -1);
+  delaunay_log("Creating dummy tetrahedron at %i with vertices: %i %i %i %i",
+               dummy3, v0, v2, v1, -1);
   tetrahedron_init(&d->tetrahedra[dummy3], v0, v2, v1, -1);
+  delaunay_tetrahedron_init(d, first_tetrahedron, v0, v1, v2, v3);
+
+  /* Setup neighour relations */
+  tetrahedron_swap_neighbour(&d->tetrahedra[dummy0], 3, first_tetrahedron, 0);
+  tetrahedron_swap_neighbour(&d->tetrahedra[dummy1], 3, first_tetrahedron, 1);
+  tetrahedron_swap_neighbour(&d->tetrahedra[dummy2], 3, first_tetrahedron, 2);
   tetrahedron_swap_neighbour(&d->tetrahedra[dummy3], 3, first_tetrahedron, 3);
-  delaunay_log("Creating first tetrahedron %i: %i %i %i %i", first_tetrahedron,
-               v0, v1, v2, v3);
-  tetrahedron_init(&d->tetrahedra[first_tetrahedron], v0, v1, v2, v3);
   tetrahedron_swap_neighbours(&d->tetrahedra[first_tetrahedron], dummy0, dummy1,
                               dummy2, dummy3, 3, 3, 3, 3);
 
@@ -318,6 +319,49 @@ inline static int delaunay_new_tetrahedron(struct delaunay* restrict d) {
   }
   /* return and then increase */
   return d->tetrahedron_index++;
+}
+
+/**
+ * @brief Utility method to initialize a tetrahedron.
+ *
+ * If Checks are enabled, this will also check the orientation of the
+ * tetrahedron.
+ *
+ * @param d Delaunay tesselation
+ * @param t Index to initialize tetrahedron at
+ * @param v0, v1, v2, v3 Indices of the vertices of the tetrahedron
+ */
+inline static void delaunay_tetrahedron_init(struct delaunay* restrict d, int t,
+                                             int v0, int v1, int v2, int v3) {
+  delaunay_log("Initializing tetrahedron at %i with vertices: %i %i %i %i", t,
+               v0, v1, v2, v3);
+#ifdef DELAUNAY_CHECKS
+  const unsigned long aix = d->integer_vertices[3 * v0];
+  const unsigned long aiy = d->integer_vertices[3 * v0 + 1];
+  const unsigned long aiz = d->integer_vertices[3 * v0 + 2];
+
+  const unsigned long bix = d->integer_vertices[3 * v1];
+  const unsigned long biy = d->integer_vertices[3 * v1 + 1];
+  const unsigned long biz = d->integer_vertices[3 * v1 + 2];
+
+  const unsigned long cix = d->integer_vertices[3 * v2];
+  const unsigned long ciy = d->integer_vertices[3 * v2 + 1];
+  const unsigned long ciz = d->integer_vertices[3 * v2 + 2];
+
+  const unsigned long dix = d->integer_vertices[3 * v3];
+  const unsigned long diy = d->integer_vertices[3 * v3 + 1];
+  const unsigned long diz = d->integer_vertices[3 * v3 + 2];
+
+  const int test = geometry_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy,
+                                         biz, cix, ciy, ciz, dix, diy, diz);
+  if (test > 0) {
+    fprintf(stderr, "Initializing tetrahedron with incorrect orientation!\n");
+    fprintf(stderr, "\tTetrahedron: %i\n\tVertices: %i %i %i %i\n", t, v0, v1,
+            v2, v3);
+    abort();
+  }
+#endif
+  tetrahedron_init(&d->tetrahedra[t], v0, v1, v2, v3);
 }
 
 inline static void delaunay_init_vertex(struct delaunay* restrict d,
@@ -721,24 +765,13 @@ inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t) {
                               d->tetrahedra[t].index_in_neighbour[3]};
 
   /* Replace t and create 3 new tetrahedra */
-  delaunay_log("Overwriting tetrahedron at %i with: %i %i %i %i", t,
-               vertices[0], vertices[1], vertices[2], v);
-  tetrahedron_init(&d->tetrahedra[t], vertices[0], vertices[1], vertices[2], v);
+  delaunay_tetrahedron_init(d, t, vertices[0], vertices[1], vertices[2], v);
   const int t1 = delaunay_new_tetrahedron(d);
-  delaunay_log("Creating new tetrahedron %i: %i %i %i %i", t1, vertices[0],
-               vertices[1], v, vertices[3]);
-  tetrahedron_init(&d->tetrahedra[t1], vertices[0], vertices[1], v,
-                   vertices[3]);
+  delaunay_tetrahedron_init(d, t1, vertices[0], vertices[1], v, vertices[3]);
   const int t2 = delaunay_new_tetrahedron(d);
-  delaunay_log("Creating new tetrahedron %i: %i %i %i %i", t2, vertices[0], v,
-               vertices[2], vertices[3]);
-  tetrahedron_init(&d->tetrahedra[t2], vertices[0], v, vertices[2],
-                   vertices[3]);
+  delaunay_tetrahedron_init(d, t2, vertices[0], v, vertices[2], vertices[3]);
   const int t3 = delaunay_new_tetrahedron(d);
-  delaunay_log("Creating new tetrahedron %i: %i %i %i %i", t3, v, vertices[1],
-               vertices[2], vertices[3]);
-  tetrahedron_init(&d->tetrahedra[t3], v, vertices[1], vertices[2],
-                   vertices[3]);
+  delaunay_tetrahedron_init(d, t3, v, vertices[1], vertices[2], vertices[3]);
 
   /* update neighbour relations */
   tetrahedron_swap_neighbours(&d->tetrahedra[t], t3, t2, t1, ngbs[3], 3, 3, 3,
@@ -907,16 +940,10 @@ inline static void delaunay_two_to_three_flip(struct delaunay* restrict d,
                              d->tetrahedra[t1].index_in_neighbour[v3_1]};
 
   /* overwrite t0 and t1 and create a new tetrahedron */
-  delaunay_log("Overwriting tetrahedron at %i with: %i %i %i %i", t0, vert[0],
-               vert[1], vert[2], vert[4]);
-  tetrahedron_init(&d->tetrahedra[t0], vert[0], vert[1], vert[2], vert[4]);
-  delaunay_log("Overwriting tetrahedron at %i with: %i %i %i %i", t1, vert[0],
-               vert[4], vert[2], vert[3]);
-  tetrahedron_init(&d->tetrahedra[t1], vert[0], vert[4], vert[2], vert[3]);
+  delaunay_tetrahedron_init(d, t0, vert[0], vert[1], vert[2], vert[4]);
+  delaunay_tetrahedron_init(d, t1, vert[0], vert[4], vert[2], vert[3]);
   const int t2 = delaunay_new_tetrahedron(d);
-  delaunay_log("Creating new tetrahedron %i: %i %i %i %i", t2, vert[4], vert[1],
-               vert[2], vert[3]);
-  tetrahedron_init(&d->tetrahedra[t2], vert[4], vert[1], vert[2], vert[3]);
+  delaunay_tetrahedron_init(d, t2, vert[4], vert[1], vert[2], vert[3]);
 
   /* fix neighbour relations */
   tetrahedron_swap_neighbours(&d->tetrahedra[t0], t2, t1, ngbs[5], ngbs[4], 3,
@@ -1101,12 +1128,8 @@ inline static int delaunay_three_to_two_flip(struct delaunay* restrict d,
 
   /* Overwrite two new tetrahedra and free the third one. */
   tetrahedron_invalidate(&d->tetrahedra[t2]);
-  delaunay_log("Overwriting tetrahedron at %i with: %i %i %i %i", t0, vert[0],
-               vert[1], vert[2], vert[3]);
-  tetrahedron_init(&d->tetrahedra[t0], vert[0], vert[1], vert[2], vert[3]);
-  delaunay_log("Overwriting tetrahedron at %i with: %i %i %i %i", t1, vert[0],
-               vert[1], vert[3], vert[4]);
-  tetrahedron_init(&d->tetrahedra[t1], vert[0], vert[1], vert[3], vert[4]);
+  delaunay_tetrahedron_init(d, t0, vert[0], vert[1], vert[2], vert[3]);
+  delaunay_tetrahedron_init(d, t1, vert[0], vert[1], vert[3], vert[4]);
 
   /* update neighbour relations */
   tetrahedron_swap_neighbours(&d->tetrahedra[t0], ngbs[0], ngbs[3], t1, ngbs[4],
@@ -1324,6 +1347,8 @@ inline static int delaunay_check_tetrahedron(struct delaunay* d, const int t,
         delaunay_log("3 to 2 with %i and %i flip not possible!", t, ngb);
       }
     }
+  } else {
+    delaunay_log("Tetrahedron %i is valid!", t)
   }
   return -1;
 }
@@ -1442,7 +1467,22 @@ inline static void delaunay_consolidate(struct delaunay* restrict d) {
 
 inline static void delaunay_print_tessellation(
     const struct delaunay* restrict d, const char* file_name) {
-  // TODO
+  FILE* file = fopen(file_name, "w");
+
+  for (int i = 0; i < d->vertex_index; ++i) {
+    fprintf(file, "V\t%i\t%g\t%g\t%g\n", i, d->vertices[3 * i],
+            d->vertices[3 * i + 1], d->vertices[3 * i + 2]);
+  }
+  for (int i = 4; i < d->tetrahedron_index; ++i) {
+    if (!d->tetrahedra[i].active) {
+      continue;
+    }
+    fprintf(file, "T\t%i\t%i\t%i\t%i\n", d->tetrahedra[i].vertices[0],
+            d->tetrahedra[i].vertices[1], d->tetrahedra[i].vertices[2],
+            d->tetrahedra[i].vertices[3]);
+  }
+
+  fclose(file);
 }
 
 inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
