@@ -1221,6 +1221,14 @@ inline static int delaunay_check_tetrahedron(struct delaunay* d, const int t,
   /* Get the vertex in the neighbouring tetrahedron opposite of t */
   const int v4 = d->tetrahedra[ngb].vertices[idx_in_ngb];
 
+  /* check if we have a neighbour that can be checked (dummies are not real and
+     should not be tested) */
+  if (ngb < 4) {
+    delaunay_log("Dummy neighbour! Skipping checks for %i...", t);
+    delaunay_assert(v4 == -1);
+    return -1;
+  }
+
   /* Get the coordinates of all vertices */
 #ifdef DELAUNAY_NONEXACT
   // TODO
