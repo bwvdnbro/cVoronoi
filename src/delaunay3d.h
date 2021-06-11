@@ -240,20 +240,12 @@ inline static void delaunay_init(struct delaunay* restrict d,
 
   /* set up vertices for large initial tetrahedron */
   int v0 = delaunay_new_vertex(d, d->anchor[0], d->anchor[1], d->anchor[2]);
-  delaunay_log("Creating vertex %i: %g %g %g", v0, d->anchor[0], d->anchor[1],
-               d->anchor[2]);
   int v1 = delaunay_new_vertex(d, d->anchor[0] + box_side, d->anchor[1],
                                d->anchor[2]);
-  delaunay_log("Creating vertex %i: %g %g %g", v1, d->anchor[0] + box_side,
-               d->anchor[1], d->anchor[2]);
   int v2 = delaunay_new_vertex(d, d->anchor[0], d->anchor[1] + box_side,
                                d->anchor[2]);
-  delaunay_log("Creating vertex %i: %g %g %g", v2, d->anchor[0],
-               d->anchor[1] + box_side, d->anchor[2]);
   int v3 = delaunay_new_vertex(d, d->anchor[0], d->anchor[1],
                                d->anchor[2] + box_side);
-  delaunay_log("Creating vertex %i: %g %g %g", v3, d->anchor[0], d->anchor[1],
-               d->anchor[2] + box_side);
   /* Create initial large tetrahedron and 4 dummy neighbours */
   int dummy0 = delaunay_new_tetrahedron(d); /* opposite of v0 */
   int dummy1 = delaunay_new_tetrahedron(d); /* opposite of v1 */
@@ -407,8 +399,6 @@ inline static void delaunay_init_vertex(struct delaunay* restrict d,
 
   /* initialise the search radii to the largest possible value */
   d->search_radii[v] = DBL_MAX;
-
-  delaunay_log("Initialized new vertex with index %i", v);
 }
 
 /**
@@ -425,7 +415,7 @@ inline static void delaunay_init_vertex(struct delaunay* restrict d,
  */
 inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
                                       double y, double z) {
-
+  delaunay_log("Adding new vertex at %i with coordinates: %g %g %g", d->vertex_index, x, y, z);
   /* check the size of the vertex arrays against the allocated memory size */
   if (d->vertex_index == d->vertex_size) {
     /* dynamically grow the size of the arrays with a factor 2 */
@@ -460,8 +450,8 @@ inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
 inline static void delaunay_add_local_vertex(struct delaunay* restrict d, int v,
                                              double x, double y, double z) {
   delaunay_assert(v < d->vertex_end && d->vertex_start <= v);
+  delaunay_log("Adding local vertex at %i with coordinates: %g %g %g", v, x, y, z);
   delaunay_init_vertex(d, v, x, y, z);
-  delaunay_log("Adding local vertex with position %g %g %g", x, y, z);
   delaunay_add_vertex(d, v);
 }
 
@@ -473,7 +463,6 @@ inline static void delaunay_add_local_vertex(struct delaunay* restrict d, int v,
 inline static void delaunay_add_new_vertex(struct delaunay* restrict d,
                                            double x, double y, double z) {
   int v = delaunay_new_vertex(d, x, y, z);
-  delaunay_log("Created new vertex with position %g %g %g", x, y, z);
   delaunay_add_vertex(d, v);
 }
 
