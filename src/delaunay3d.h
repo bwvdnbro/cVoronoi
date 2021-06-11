@@ -276,10 +276,6 @@ inline static void delaunay_init(struct delaunay* restrict d,
 
   /* TODO: Setup vertex-tetrahedra links... */
 
-  /* Set pointer to last created tetrahedron, this will be our first guess when
-   * adding new points to the tessellation */
-  d->last_tetrahedron = first_tetrahedron;
-
   /* Perform sanity checks */
   delaunay_check_tessellation(d);
   delaunay_log("Passed post init check");
@@ -354,6 +350,10 @@ inline static void delaunay_tetrahedron_init(struct delaunay* restrict d, int t,
   }
 #endif
   tetrahedron_init(&d->tetrahedra[t], v0, v1, v2, v3);
+
+  /* Touch the last initialized tetrahedron, This will be our next guess upon
+   * insertion. */
+  d->last_tetrahedron = t;
 }
 
 inline static void delaunay_init_vertex(struct delaunay* restrict d,
