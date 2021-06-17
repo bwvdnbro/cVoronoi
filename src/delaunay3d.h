@@ -63,6 +63,24 @@ struct delaunay {
    *  actually used during the incremental construction. */
   unsigned long int* integer_vertices;
 
+  /*! @brief Vertex-tetrahedron connections. For every vertex in the
+   * tessellation, this array stores the index of a tetrahedron that contains
+   * this vertex (usually one of the last tetrahedra that was constructed with
+   * this vertex as a member vertex). This array is not required for the
+   * incremental construction algorithm itself, but is indispensable for the
+   * conversion from Delaunay tessellation to Voronoi grid, since it links each
+   * input vertex to one of the tetrahedra it is connected to. Without this
+   * array, we would have no efficient way of finding a tetrahedron that
+   * contains a given vertex. */
+  int* vertex_tetrahedron_links;
+
+  /*! @brief Vertex-tetrahedron connection indices. For every vertex-tetrahedron
+   * pair stored in vertex_tetrahedron_links, this array contains the index of
+   * the vertex within the vertex list of the tetrahedron. This saves us from
+   * having to loop through the tetrahedron vertices during Voronoi grid
+   * construction. */
+  int* vertex_tetrahedron_index;
+
   /*! @brief Vertex search radii. For every vertex, this array contains twice
    *  the radius of the largest circumsphere of the tetrahedra that vertex is
    *  part of. */
@@ -181,6 +199,8 @@ inline static void delaunay_init(struct delaunay* restrict d,
 #endif
   d->integer_vertices =
       (unsigned long int*)malloc(vertex_size * 3 * sizeof(unsigned long int));
+  d->vertex_tetrahedron_links = (int*)malloc(vertex_size * sizeof(int));
+  d->vertex_tetrahedron_index = (int*)malloc(vertex_size * sizeof(int));
   d->search_radii = (double*)malloc(vertex_size * sizeof(double));
   d->vertex_size = vertex_size;
   /* set vertex start and end (indicating where the local vertices start and
@@ -337,6 +357,16 @@ inline static void delaunay_init_tetrahedron(struct delaunay* d, int t, int v0,
 #endif
   tetrahedron_init(&d->tetrahedra[t], v0, v1, v2, v3);
 
+  /* Update vertex-tetrahedron links */
+  d->vertex_tetrahedron_links[v0] = t;
+  d->vertex_tetrahedron_index[v0] = 0;
+  d->vertex_tetrahedron_links[v1] = t;
+  d->vertex_tetrahedron_index[v1] = 1;
+  d->vertex_tetrahedron_links[v2] = t;
+  d->vertex_tetrahedron_index[v2] = 2;
+  d->vertex_tetrahedron_links[v3] = t;
+  d->vertex_tetrahedron_index[v3] = 3;
+
   /* Touch the last initialized tetrahedron, This will be our next guess upon
    * insertion. */
   d->last_tetrahedron = t;
@@ -377,11 +407,11 @@ inline static void delaunay_init_vertex(struct delaunay* restrict d,
   d->integer_vertices[3 * v + 1] = delaunay_double_to_int(rescaled_y);
   d->integer_vertices[3 * v + 2] = delaunay_double_to_int(rescaled_z);
 
-  /* TODO: initialise the variables that keep track of the link between vertices
+  /* Initialise the variables that keep track of the link between vertices
    * and tetrahedra. We use negative values so that we can later detect missing
    * links. */
-  /*d->vertex_triangles[v] = -1;
-  d->vertex_triangle_index[v] = -1;*/
+  d->vertex_tetrahedron_links[v] = -1;
+  d->vertex_tetrahedron_index[v] = -1;
 
   /* initialise the search radii to the largest possible value */
   d->search_radii[v] = DBL_MAX;
@@ -415,6 +445,10 @@ inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
 #endif
     d->integer_vertices = (unsigned long int*)realloc(
         d->integer_vertices, d->vertex_size * 3 * sizeof(unsigned long int));
+    d->vertex_tetrahedron_links = (int*)realloc(d->vertex_tetrahedron_links,
+                                                d->vertex_size * sizeof(int));
+    d->vertex_tetrahedron_index = (int*)realloc(d->vertex_tetrahedron_index,
+                                                d->vertex_size * sizeof(int));
     d->search_radii =
         (double*)realloc(d->search_radii, d->vertex_size * sizeof(double));
   }
@@ -1797,6 +1831,21 @@ inline static void delaunay_append_tetrahedron_containing_vertex(
 inline static void delaunay_consolidate(struct delaunay* restrict d) {
   /* perform a consistency test if enabled */
   delaunay_check_tessellation(d);
+#ifdef DELAUNAY_CHECKS
+  /* loop over all vertices to check vertex-tetrahedron links */
+  for (int v = 0; v < d->vertex_end; v++) {
+    int t_idx = d->vertex_tetrahedron_links[v];
+    struct tetrahedron* t = &d->tetrahedra[t_idx];
+    int idx_in_t = d->vertex_tetrahedron_index[v];
+    if (v != t->vertices[d->vertex_tetrahedron_index[v]]) {
+      fprintf(stderr, "Wrong vertex-tetrahedron link!\n");
+      fprintf(stderr, "\tVertex %i at index %i in\n", v, idx_in_t);
+      fprintf(stderr, "\ttetrahedron %i: %i %i %i %i\n", t_idx, t->vertices[0],
+              t->vertices[1], t->vertices[2], t->vertices[3]);
+      abort();
+    }
+  }
+#endif
 }
 
 inline static void delaunay_print_tessellation(
