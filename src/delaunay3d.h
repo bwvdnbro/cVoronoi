@@ -1646,12 +1646,12 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
     for (int i = 0; i < 4; i++) {
       int t_ngb = d->tetrahedra[t0].neighbours[i];
       /* check neighbour relations */
-      int idx_in_ngb0 = d->tetrahedra[t0].index_in_neighbour[i];
+      int idx_in_ngb = d->tetrahedra[t0].index_in_neighbour[i];
       if (!d->tetrahedra[t_ngb].active) {
         fprintf(stderr, "Tetrahedron %i has an inactive neighbour: %i", t0,
                 t_ngb);
       }
-      if (d->tetrahedra[t_ngb].neighbours[idx_in_ngb0] != t0) {
+      if (d->tetrahedra[t_ngb].neighbours[idx_in_ngb] != t0) {
         fprintf(stderr, "Wrong neighbour!\n");
         fprintf(stderr, "Tetrahedron %i: %i %i %i %i\n", t0, vt0_0, vt0_1,
                 vt0_2, vt0_3);
@@ -1685,7 +1685,7 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
         continue;
       }
       /* check in-sphere criterion for delaunayness */
-      int vertex_to_check = d->tetrahedra[t_ngb].vertices[idx_in_ngb0];
+      int vertex_to_check = d->tetrahedra[t_ngb].vertices[idx_in_ngb];
 #ifdef DELAUNAY_NONEXACT
       // TODO
 #endif
