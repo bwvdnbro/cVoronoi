@@ -30,7 +30,7 @@ inline static void delaunay_append_tetrahedron_containing_vertex(
 inline static int delaunay_find_tetrahedra_containing_vertex(struct delaunay* d,
                                                              int v);
 inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t);
-inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, int* t);
+inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, const int* t);
 inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v,
                                          const int* t, int n);
 inline static void delaunay_check_tetrahedra(struct delaunay* d, int v);
@@ -488,7 +488,7 @@ inline static void delaunay_add_vertex(struct delaunay* restrict d, int v) {
     /* point on face: replace the 2 tetrahedra with 6 new ones */
     delaunay_log("Vertex %i on the face between tetrahedra %i and %i", v,
                  d->tetrahedra_containing_vertex[0],
-                 d->tetrahedra_containing_vertex[0]);
+                 d->tetrahedra_containing_vertex[1]);
     delaunay_two_to_six_flip(d, v, d->tetrahedra_containing_vertex);
   } else if (number_of_tetrahedra > 2) {
     /* point on edge: replace the N tetrahedra with 2N new ones */
@@ -793,10 +793,115 @@ inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t) {
  * @param v The new vertex
  * @param t Tetrahedra to replace
  */
-inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, int* t) {
-  // TODO
-  fprintf(stderr, "Degenerate case not implemented!");
-  abort();
+inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, const int* t) {
+  /* Find the indices of the vertices of the common triangle in both tetrahedra
+   */
+  int triangle_indices[2][3];
+  int num_vertices = 0;
+  struct tetrahedron* t0 = &d->tetrahedra[t[0]];
+  struct tetrahedron* t1 = &d->tetrahedra[t[1]];
+  for (int current_vertex_idx_in_t0 = 0; current_vertex_idx_in_t0 < 4;
+       current_vertex_idx_in_t0++) {
+    int test_idx = 0;
+    while (test_idx < 4 &&
+           t0->vertices[current_vertex_idx_in_t0] != t1->vertices[test_idx]) {
+      test_idx++;
+    }
+    if (test_idx < 4) {
+      triangle_indices[0][num_vertices] = current_vertex_idx_in_t0;
+      triangle_indices[1][num_vertices] = test_idx;
+      num_vertices++;
+    }
+  }
+  delaunay_assert(num_vertices == 3);
+
+  /* Get the vertex of the first tetrahedron not shared with the second
+   * tetrahedron */
+  int top_idx_in_t0 = 6 - triangle_indices[0][0] - triangle_indices[0][1] -
+                      triangle_indices[0][2];
+  /* Make sure we have a positive permutation of 0123 */
+  if (!positive_permutation(triangle_indices[0][0], triangle_indices[0][1],
+                            top_idx_in_t0, triangle_indices[0][2])) {
+    int tmp = triangle_indices[0][0];
+    triangle_indices[0][0] = triangle_indices[0][1];
+    triangle_indices[0][1] = tmp;
+
+    tmp = triangle_indices[1][0];
+    triangle_indices[1][0] = triangle_indices[1][1];
+    triangle_indices[1][1] = tmp;
+  }
+
+  /* Set variables in accordance to figure */
+  const int v0_0 = triangle_indices[0][0];
+  const int v1_0 = triangle_indices[0][1];
+  const int v2_0 = top_idx_in_t0;
+  const int v3_0 = triangle_indices[0][2];
+
+  const int v0_1 = triangle_indices[1][0];
+  const int v1_1 = triangle_indices[1][1];
+  const int v3_1 = triangle_indices[1][2];
+  const int v4_1 = d->tetrahedra[t[0]].index_in_neighbour[v2_0];
+
+  // now set some variables to the names in the documentation figure
+  const int vert[6] = {
+      d->tetrahedra[t[0]].vertices[v0_0], d->tetrahedra[t[0]].vertices[v1_0],
+      d->tetrahedra[t[0]].vertices[v2_0], d->tetrahedra[t[0]].vertices[v3_0],
+      d->tetrahedra[t[1]].vertices[v4_1], v};
+
+  const int ngbs[6] = {d->tetrahedra[t[0]].neighbours[v0_0],
+                       d->tetrahedra[t[1]].neighbours[v0_1],
+                       d->tetrahedra[t[1]].neighbours[v1_1],
+                       d->tetrahedra[t[0]].neighbours[v1_0],
+                       d->tetrahedra[t[0]].neighbours[v3_0],
+                       d->tetrahedra[t[1]].neighbours[v3_1]};
+
+  const int idx_in_ngbs[6] = {d->tetrahedra[t[0]].index_in_neighbour[v0_0],
+                              d->tetrahedra[t[1]].index_in_neighbour[v0_1],
+                              d->tetrahedra[t[1]].index_in_neighbour[v1_1],
+                              d->tetrahedra[t[0]].index_in_neighbour[v1_0],
+                              d->tetrahedra[t[0]].index_in_neighbour[v3_0],
+                              d->tetrahedra[t[1]].index_in_neighbour[v3_1]};
+
+  /* Overwrite the two existing tetrahedra and create 4 new ones */
+  delaunay_tetrahedron_init(d, t[0], vert[0], vert[1], vert[2], vert[5], 1);
+  delaunay_tetrahedron_init(d, t[1], vert[0], vert[5], vert[2], vert[3], 1);
+  int tn2 = delaunay_new_tetrahedron(d);
+  delaunay_tetrahedron_init(d, tn2, vert[5], vert[1], vert[2], vert[3], 1);
+  int tn3 = delaunay_new_tetrahedron(d);
+  delaunay_tetrahedron_init(d, tn3, vert[0], vert[1], vert[5], vert[4], 1);
+  int tn4 = delaunay_new_tetrahedron(d);
+  delaunay_tetrahedron_init(d, tn4, vert[0], vert[5], vert[3], vert[4], 1);
+  int tn5 = delaunay_new_tetrahedron(d);
+  delaunay_tetrahedron_init(d, tn5, vert[5], vert[1], vert[3], vert[4], 1);
+
+  /* Update neighbour relations */
+  tetrahedron_swap_neighbours(&d->tetrahedra[t[0]], tn2, t[1],
+                              tn3, ngbs[4], 3, 3, 3, idx_in_ngbs[4]);
+  tetrahedron_swap_neighbours(&d->tetrahedra[t[1]], tn2, ngbs[3],
+                              tn4, t[0], 1, idx_in_ngbs[3], 3, 1);
+  tetrahedron_swap_neighbours(&d->tetrahedra[tn2], ngbs[0], t[1],
+                              tn5, t[0], idx_in_ngbs[0], 0, 3, 0);
+  tetrahedron_swap_neighbours(&d->tetrahedra[tn3], tn5, tn4,
+                              ngbs[5], t[0], 2, 2, idx_in_ngbs[5], 2);
+  tetrahedron_swap_neighbours(&d->tetrahedra[tn4], tn5, ngbs[2],
+                              tn3, t[1], 1, idx_in_ngbs[2], 1, 2);
+  tetrahedron_swap_neighbours(&d->tetrahedra[tn5], ngbs[1], tn4,
+                              tn3, tn2, idx_in_ngbs[1], 0, 0, 2);
+
+  tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[0]], idx_in_ngbs[0], tn2, 0);
+  tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[1]], idx_in_ngbs[1], tn5, 0);
+  tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[2]], idx_in_ngbs[2], tn4, 1);
+  tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[3]], idx_in_ngbs[3], t[1], 1);
+  tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[4]], idx_in_ngbs[4], t[0], 3);
+  tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[5]], idx_in_ngbs[5], tn3, 2);
+
+  /* Add new/updated tetrahedra to queue for checking */
+  delaunay_tetrahedron_enqueue(d, t[0]);
+  delaunay_tetrahedron_enqueue(d, t[1]);
+  delaunay_tetrahedron_enqueue(d, tn2);
+  delaunay_tetrahedron_enqueue(d, tn3);
+  delaunay_tetrahedron_enqueue(d, tn4);
+  delaunay_tetrahedron_enqueue(d, tn5);
 }
 
 /**
@@ -905,7 +1010,7 @@ inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v,
     /* Upper tetrahedron (connected to axis0 = vert[n], see figure) */
     int tn0 = tn[2 * j];
     int v00 = vert[j];
-    int v01 = vert[n];     /* axis0 */
+    int v01 = vert[n]; /* axis0 */
     int v02 = vert[(j + 1) % n];
     int v03 = vert[n + 2]; /* new vertex */
 
