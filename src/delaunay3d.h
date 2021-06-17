@@ -830,11 +830,123 @@ inline static void delaunay_two_to_six_flip(struct delaunay* d, int v, int* t) {
  * @param t The tetrahedra to replace
  * @param n The number of tetrahedra to replace
  */
-inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v, int* t,
-                                         int n) {
-  // TODO
-  fprintf(stderr, "Degenerate case not implemented!");
-  abort();
+inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v,
+                                         const int* t, int n) {
+  /* find the indices of the common axis vertices in all tetrahedra */
+  int axis_idx_in_tj[n][2];
+  int tn_min_1_idx_in_t0 = 0;
+  int num_axis = 0;
+  struct tetrahedron* t0 = &d->tetrahedra[t[0]];
+  for (int cur_v_idx_in_t0 = 0; cur_v_idx_in_t0 < 4; cur_v_idx_in_t0++) {
+    int current_vertex_idx_in_tj[n];
+    current_vertex_idx_in_tj[0] = cur_v_idx_in_t0;
+    int current_vertex_is_axis = 1;
+    for (int j = 1; j < n; ++j) {
+      struct tetrahedron* tj = &d->tetrahedra[t[j]];
+      int test_idx = 0;
+      while (test_idx < 4 &&
+             t0->vertices[cur_v_idx_in_t0] != tj->vertices[test_idx]) {
+        test_idx++;
+      }
+      current_vertex_is_axis &= (test_idx < 4);
+      current_vertex_idx_in_tj[j] = test_idx;
+    }
+    if (current_vertex_is_axis) {
+      for (int j = 0; j < n; ++j) {
+        axis_idx_in_tj[j][num_axis] = current_vertex_idx_in_tj[j];
+      }
+      ++num_axis;
+    } else if (current_vertex_idx_in_tj[1] < 4) {
+      /* Vertex is not an axis vertex, but is present in t1. This means that the
+       * tetrahedron opposite of this vertex must be t_(n-1) (see figure). */
+      tn_min_1_idx_in_t0 = current_vertex_idx_in_tj[0];
+    }
+  }
+  /* Found both vertices of the edge shared by all tetrahedra? */
+  delaunay_assert(num_axis == 2);
+
+  /* now make sure we give the indices the same meaning as in the figure */
+  const int t1_idx_in_t0 =
+      6 - axis_idx_in_tj[0][0] - axis_idx_in_tj[0][1] - tn_min_1_idx_in_t0;
+  if (!positive_permutation(t1_idx_in_t0, axis_idx_in_tj[0][0],
+                            tn_min_1_idx_in_t0, axis_idx_in_tj[0][1])) {
+    for (int j = 0; j < n; ++j) {
+      const int tmp = axis_idx_in_tj[j][0];
+      axis_idx_in_tj[j][0] = axis_idx_in_tj[j][1];
+      axis_idx_in_tj[j][1] = tmp;
+    }
+  }
+
+  /* set some variables to the values in the documentation figure */
+  int vert[n + 3], ngbs[2 * n], idx_in_ngb[2 * n];
+  int tprev_in_tcur = tn_min_1_idx_in_t0;
+  for (int j = 0; j < n; ++j) {
+    const int tnext_in_tcur =
+        6 - tprev_in_tcur - axis_idx_in_tj[j][0] - axis_idx_in_tj[j][1];
+    struct tetrahedron* tj = &d->tetrahedra[t[j]];
+    vert[j] = tj->vertices[tnext_in_tcur];
+    tprev_in_tcur = tj->index_in_neighbour[tnext_in_tcur];
+    ngbs[2 * j] = tj->neighbours[axis_idx_in_tj[j][0]];
+    ngbs[2 * j + 1] = tj->neighbours[axis_idx_in_tj[j][1]];
+    idx_in_ngb[2 * j] = tj->index_in_neighbour[axis_idx_in_tj[j][0]];
+    idx_in_ngb[2 * j + 1] = tj->index_in_neighbour[axis_idx_in_tj[j][1]];
+  }
+  vert[n] = d->tetrahedra[t[0]].vertices[axis_idx_in_tj[0][0]];
+  vert[n + 1] = d->tetrahedra[t[0]].vertices[axis_idx_in_tj[0][1]];
+  vert[n + 2] = v;
+
+  /* create n new tetrahedra and overwrite the n existing ones */
+  int tn[2 * n];
+  for (int j = 0; j < n; j++) {
+    tn[2 * j] = t[j];
+    tn[2 * j + 1] = delaunay_new_tetrahedron(d);
+  }
+  for (int j = 0; j < n; j++) {
+    /* Upper tetrahedron (connected to axis0 = vert[n], see figure) */
+    int tn0 = tn[2 * j];
+    int v00 = vert[j];
+    int v01 = vert[n];     /* axis0 */
+    int v02 = vert[(j + 1) % n];
+    int v03 = vert[n + 2]; /* new vertex */
+
+    /* Lower tetrahedron (connected to axis1 = vert[n + 1], see figure) */
+    int tn1 = tn[2 * j + 1];
+    int v10 = v00;
+    int v11 = vert[n + 2]; /* new vertex */
+    int v12 = v02;
+    int v13 = vert[n + 1]; /* axis1 */
+
+    /* Initialize tetrahedra */
+    delaunay_tetrahedron_init(d, tn0, v00, v01, v02, v03, 1);
+    delaunay_tetrahedron_init(d, tn1, v10, v11, v12, v13, 1);
+
+    /* Setup neighbour relations */
+    /* Upper tetrahedron (see figure) */
+    int t_next_upper = tn[(2 * (j + 1)) % (2 * n)];
+    int t_prev_upper = tn[(2 * (j - 1) + 2 * n) % (2 * n)];
+    int t_ngb_upper = ngbs[2 * j + 1];
+    int idx_in_t_ngb_upper = idx_in_ngb[2 * j + 1];
+    tetrahedron_swap_neighbours(&d->tetrahedra[tn0], t_next_upper, tn1,
+                                t_prev_upper, t_ngb_upper, 2, 3, 0,
+                                idx_in_t_ngb_upper);
+    tetrahedron_swap_neighbour(&d->tetrahedra[t_ngb_upper], idx_in_t_ngb_upper,
+                               tn0, 3);
+
+    /* Lower tetrahedron (see figure) */
+    int t_next_lower = tn[(2 * (j + 1) + 1) % (2 * n)];
+    int t_prev_lower = tn[(2 * (j - 1) + 1 + 2 * n) % (2 * n)];
+    int t_ngb_lower = ngbs[2 * j];
+    int idx_in_t_ngb_lower = idx_in_ngb[2 * j];
+    tetrahedron_swap_neighbours(&d->tetrahedra[tn1], t_next_lower, t_ngb_lower,
+                                t_prev_lower, tn0, 2, idx_in_t_ngb_lower, 0, 1);
+    tetrahedron_swap_neighbour(&d->tetrahedra[t_ngb_lower], idx_in_t_ngb_lower,
+                               tn1, 1);
+  }
+
+  /* add new/updated tetrahedra to the queue for checking */
+  for (int j = 0; j < 2 * n; j++) {
+    delaunay_tetrahedron_enqueue(d, tn[j]);
+  }
 }
 
 /**
