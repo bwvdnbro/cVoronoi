@@ -369,6 +369,19 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
     r *= 1.25;
   }
 #else
+  for (int i = 0; i < 27; i++) {
+    if (i == 13) continue; /* skip (0, 0, 0) */
+    double shiftx = ((i % 3) - 1.) * c->hs.side[0];
+    double shifty = ((i / 3) % 3 - 1.) * c->hs.side[1];
+    double shiftz = ((i / 9) % 3 - 1.) * c->hs.side[2];
+
+    for (int k = 0; k < c->count; ++k) {
+      int l = c->r_sort_lists[4][k];
+      delaunay_add_new_vertex(&c->d, c->vertices[3 * l] + shiftx,
+                              c->vertices[3 * l + 1] + shifty,
+                              c->vertices[3 * l + 2] + shiftz);
+    }
+  }
 #endif
 }
 

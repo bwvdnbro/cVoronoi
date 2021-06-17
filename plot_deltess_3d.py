@@ -22,9 +22,9 @@ def plot(vs, ts):
     axes.add_collection3d(tri)
     axes.plot(vs[:, 0], vs[:, 1], vs[:, 2], 'ko')
     # axes.set_axis_off()
-    axes.set_xlim([-.1, 1.1])
-    axes.set_ylim([-.1, 1.1])
-    axes.set_zlim([-.1, 1.1])
+    # axes.set_xlim([-.1, 1.1])
+    # axes.set_ylim([-.1, 1.1])
+    # axes.set_zlim([-.1, 1.1])
     pl.show()
 
 

@@ -2,6 +2,9 @@
 
 ### TODO: Delaunay3D
 -[X] check in-sphere criterion in check_tesselation
--[X] print tesselation
+-[X] print and plot tesselation
+-[x] Flips for degenerate cases
 -[ ] Non-exact tests
--[ ] Flips for degenerate cases
+
+### TODO: Voronoi3D
+basically everything
