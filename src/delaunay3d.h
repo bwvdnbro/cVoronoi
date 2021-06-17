@@ -700,6 +700,8 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
         next_vertex = d->tetrahedra[next_t].index_in_neighbour[cur_vertex];
         next_t = d->tetrahedra[next_t].neighbours[cur_vertex];
       }
+      /* Don't forget to add back last_t (which was overwritten) */
+      delaunay_append_tetrahedron_containing_vertex(d, last_t);
     }
   }
   return d->tetrahedra_containing_vertex_index;
