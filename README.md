@@ -10,7 +10,8 @@
 -[ ] Delaunay search radius & better PBC
 
 ### TODO: Voronoi3D
-basically everything
+-[X] Refactor voronoi2d code to match current version in swift
+-[ ] basically everything
 #### Construction:
 1. Calculate the centroid of each tetrahedron of the Delaunay tesselation and store those centroids in their respective tetrahedra.
 
