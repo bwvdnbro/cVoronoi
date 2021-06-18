@@ -129,12 +129,6 @@ struct voronoi {
 };
 
 /* Forward declarations */
-static inline double voronoi_compute_midpoint_area_face(double ax, double ay,
-                                                        double bx, double by,
-                                                        double *result);
-static inline double voronoi_compute_centroid_volume_triangle(
-    double ax, double ay, double bx, double by, double cx, double cy,
-    double *result);
 static inline void voronoi_add_pair(struct voronoi *v, int sid,
                                     struct cell *restrict c,
                                     int left_part_pointer,
@@ -307,8 +301,8 @@ static inline void voronoi_init(struct voronoi *restrict v,
       cx = vertices[2 * vor_vert_ix];
       cy = vertices[2 * vor_vert_ix + 1];
 
-      double V = voronoi_compute_centroid_volume_triangle(ax, ay, bx, by, cx,
-                                                          cy, centroid);
+      double V = geometry_compute_centroid_volume_triangle(ax, ay, bx, by, cx,
+                                                           cy, centroid);
       cell_volume += V;
       cell_centroid[0] += V * centroid[0];
       cell_centroid[1] += V * centroid[1];
@@ -343,8 +337,8 @@ static inline void voronoi_init(struct voronoi *restrict v,
     cx = vertices[2 * first_vor_vert_ix];
     cy = vertices[2 * first_vor_vert_ix + 1];
 
-    double V = voronoi_compute_centroid_volume_triangle(ax, ay, bx, by, cx, cy,
-                                                        centroid);
+    double V = geometry_compute_centroid_volume_triangle(ax, ay, bx, by, cx, cy,
+                                                         centroid);
     cell_volume += V;
     cell_centroid[0] += V * centroid[0];
     cell_centroid[1] += V * centroid[1];
@@ -429,7 +423,7 @@ static inline void voronoi_add_pair(struct voronoi *v, int sid,
   this_pair->left = left_part_pointer;
   this_pair->right = right_part_pointer;
   this_pair->surface_area =
-      voronoi_compute_midpoint_area_face(ax, ay, bx, by, this_pair->midpoint);
+      geometry_compute_midpoint_area_face(ax, ay, bx, by, this_pair->midpoint);
 #ifdef VORONOI_STORE_CONNECTIONS
   this_pair->a[0] = ax;
   this_pair->a[1] = ay;
@@ -437,51 +431,6 @@ static inline void voronoi_add_pair(struct voronoi *v, int sid,
   this_pair->b[1] = by;
 #endif
   ++v->pair_index[sid];
-}
-
-/**
- * @brief Compute the volume and centroid of the triangle through the given 3
- * points.
- *
- * @param ax, ay, bx, by, cx, cy Point coordinates.
- * @param result Centroid of the triangle.
- * @return Volume of the triangle.
- */
-static inline double voronoi_compute_centroid_volume_triangle(
-    double ax, double ay, double bx, double by, double cx, double cy,
-    double *result) {
-
-  result[0] = (ax + bx + cx) / 3.;
-  result[1] = (ay + by + cy) / 3.;
-
-  double s10x = bx - ax;
-  double s10y = by - ay;
-
-  double s20x = cx - ax;
-  double s20y = cy - ay;
-
-  return 0.5 * fabs(s10x * s20y - s20x * s10y);
-}
-
-/**
- * @brief Compute the midpoint and surface area of the face with the given
- * vertices.
- *
- * @param ax, ay, bx, by Face vertices.
- * @param result Midpoint of the face.
- * @return Surface area of the face.
- */
-static inline double voronoi_compute_midpoint_area_face(double ax, double ay,
-                                                        double bx, double by,
-                                                        double *result) {
-
-  result[0] = 0.5 * (ax + bx);
-  result[1] = 0.5 * (ay + by);
-
-  double sx = bx - ax;
-  double sy = by - ay;
-
-  return sqrt(sx * sx + sy * sy);
 }
 
 /**

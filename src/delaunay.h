@@ -7,8 +7,8 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-
 #include "dimensionality.h"
+#include "geometry.h"
 
 /*! @brief Activate extensive log output. */
 #define DELAUNAY_LOG_OUTPUT

@@ -6,14 +6,16 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include "delaunay.h"
+#include "geometry.h"
+#include "dimensionality.h"
 
 #define voronoi_error(s, ...) \
   fprintf(stderr, s, ##__VA_ARGS__); \
   abort();
-
 /*! @brief Activate runtime assertions. */
-#define VORONOI_DO_ASSERTIONS
 
+#define VORONOI_DO_ASSERTIONS
 /**
  *@brief Evaluate the given condition and abort if it evaluates to true.
  *
@@ -29,9 +31,8 @@
   }
 #else
 #define delaunay_assert(condition)
-#endif
 
-#include "dimensionality.h"
+#endif
 
 #if defined(DIMENSIONALITY_2D)
 #include "voronoi2d.h"
