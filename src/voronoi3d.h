@@ -466,6 +466,16 @@ inline static void voronoi_init(struct voronoi *restrict v,
 #ifdef VORONOI_STORE_CELL_STATS
     this_cell->nface = nface;
 #endif
+    /* reset flags for all neighbours of this cell */
+    neighbour_flags[gen_idx_in_d] = 0;
+    for (int i = 0; i < queue.index_end; i++) {
+      neighbour_flags[queue.vertex_indices[i]] = 0;
+    }
+#ifdef VORONOI_CHECKS
+    for (int i = 0; i < d->vertex_index; i++) {
+      voronoi_assert(neighbour_flags[i] == 0);
+    }
+#endif
   }
   free(voronoi_vertices);
   free(neighbour_flags);
@@ -497,7 +507,10 @@ inline static int voronoi_new_face(struct voronoi *v, int sid,
 }
 
 inline static void voronoi_destroy(struct voronoi *restrict v) {
-  // TODO
+  free(v->cells);
+  for (int i = 0; i < 2; ++i) {
+    free(v->pairs[i]);
+  }
 }
 
 inline static void voronoi_print_grid(const struct voronoi *v,
