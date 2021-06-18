@@ -13,6 +13,17 @@
 #define voronoi_error(s, ...) \
   fprintf(stderr, s, ##__VA_ARGS__); \
   abort();
+
+/*! @brief Store the edges of faces (so that the actual Voronoi grid can be
+ *  reconstructed). */
+#define VORONOI_STORE_CONNECTIONS
+
+/*! @brief Store information about the number of faces per cell. */
+#define VORONOI_STORE_CELL_STATS
+
+/*! @brief Store cell generators. */
+#define VORONOI_STORE_GENERATORS
+
 /*! @brief Activate runtime assertions. */
 
 #define VORONOI_DO_ASSERTIONS
@@ -31,8 +42,9 @@
   }
 #else
 #define delaunay_assert(condition)
-
 #endif
+
+#define VORONOI_CHECKS
 
 #if defined(DIMENSIONALITY_2D)
 #include "voronoi2d.h"

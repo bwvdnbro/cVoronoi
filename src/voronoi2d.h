@@ -30,16 +30,6 @@
 
 #include <string.h>
 
-/*! @brief Store the edges of faces (so that the actual Voronoi grid can be
- *  reconstructed). */
-#define VORONOI_STORE_CONNECTIONS
-
-/*! @brief Store information about the number of faces per cell. */
-#define VORONOI_STORE_CELL_STATS
-
-/*! @brief Store cell generators. */
-#define VORONOI_STORE_GENERATORS
-
 /**
  * @brief Voronoi interface.
  *
@@ -216,19 +206,7 @@ static inline void voronoi_init(struct voronoi *restrict v,
           "one of the neighbouring cells is empty.");
     }
 
-    double ax = v1x - v0x;
-    double ay = v1y - v0y;
-    double bx = v2x - v0x;
-    double by = v2y - v0y;
-
-    double D = 2. * (ax * by - ay * bx);
-    double a2 = ax * ax + ay * ay;
-    double b2 = bx * bx + by * by;
-    double Rx = (by * a2 - ay * b2) / D;
-    double Ry = (ax * b2 - bx * a2) / D;
-
-    vertices[2 * i] = v0x + Rx;
-    vertices[2 * i + 1] = v0y + Ry;
+    geometry2d_compute_circumcenter(v0x, v0y, v1x, v1y, v2x, v2y, &vertices[2 * i]);
   } /* loop over the Delaunay triangles and compute the circumcenters */
 
   /* Allocate memory for the voronoi pairs. */

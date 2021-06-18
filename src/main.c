@@ -45,7 +45,7 @@
 #include "cell.h"
 
 /**
- * @brief Auxiliary function used to print an arg-sorted list of vertices to a
+ * @brief Auxiliary function used to print an arg-sorted list of vertex_indices to a
  * file.
  *
  * @param order Array containing the indices that sort the vertex array.
@@ -94,7 +94,7 @@ static inline void move_circle(double *p, double dphi) {
 }
 
 /**
- * @brief Update the positions of vertices that follow a special path.
+ * @brief Update the positions of vertex_indices that follow a special path.
  *
  * @param loop Loop index.
  * @param vertices Vertex coordinates.
@@ -126,7 +126,7 @@ static inline void update_paths(int loop, double *vertices) {
 int main() {
   /* seed the random generator with the most random seed ever */
   srand(42);
-  int count[3] = {5, 5, 1};
+  int count[3] = {2, 2, 2};
   double dim[3] = {2., 2., 2.};
   struct cell c;
   cell_init(&c, count, 0.5, dim);

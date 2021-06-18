@@ -59,7 +59,7 @@ struct delaunay {
   double* rescaled_vertices;
 #endif
 
-  /*! @brief Integer vertices. These are the vertex coordinates that are
+  /*! @brief Integer vertex_indices. These are the vertex coordinates that are
    *  actually used during the incremental construction. */
   unsigned long int* integer_vertices;
 
@@ -77,7 +77,7 @@ struct delaunay {
   /*! @brief Vertex-tetrahedron connection indices. For every vertex-tetrahedron
    * pair stored in vertex_tetrahedron_links, this array contains the index of
    * the vertex within the vertex list of the tetrahedron. This saves us from
-   * having to loop through the tetrahedron vertices during Voronoi grid
+   * having to loop through the tetrahedron vertex_indices during Voronoi grid
    * construction. */
   int* vertex_tetrahedron_index;
 
@@ -94,14 +94,19 @@ struct delaunay {
    *  vertex_index, the memory buffer is full and needs to be expanded. */
   int vertex_size;
 
-  /*! @brief Begin index of the normal vertices. This skips the 3 auxiliary
-   *  vertices required for the incremental construction algorithm. */
+  /*! @brief Begin index of the normal vertex_indices. This skips the 3 auxiliary
+   *  vertex_indices required for the incremental construction algorithm. */
   int vertex_start;
 
-  /*! @brief End index of the normal vertices. This variable is set by calling
-   *  delaunay_consolidate() and contains the offset of the ghost vertices
+  /*! @brief End index of the normal vertex_indices. This variable is set by calling
+   *  delaunay_consolidate() and contains the offset of the ghost vertex_indices
    *  within the vertex array. */
   int vertex_end;
+
+  /*! @brief Offset of the ghost vertex_indices. This will be set by
+   * delaunay_consolidate() and is used in the construction of the voronoi
+   * grid. */
+  int ghost_offset;
 
   /*! @brief Tetrahedra that make up the tessellation. */
   struct tetrahedron* tetrahedra;
@@ -162,7 +167,7 @@ struct delaunay {
 
   /*! @brief Index of the last tetrahedron that was accessed. Used as initial
    *  guess for the tetrahedron that contains the next vertex that will be
-   * added. If vertices are added in some sensible order (e.g. in Peano-Hilbert
+   * added. If vertex_indices are added in some sensible order (e.g. in Peano-Hilbert
    * curve order) then this will greatly speed up the algorithm. */
   int last_tetrahedron;
 
@@ -179,7 +184,7 @@ struct delaunay {
  * and initializes the variables used for bookkeeping.
  *
  * It then sets up a large tetrahedron that contains the entire simulation box
- * and additional buffer space to deal with boundary ghost vertices, and 4
+ * and additional buffer space to deal with boundary ghost vertex_indices, and 4
  * additional dummy tetrahedron that provide valid neighbours for the 4 sides of
  * this tetrahedron (these dummy tetrahedra themselves have an invalid tip
  * vertex and are therefore simply placeholders).
@@ -203,12 +208,13 @@ inline static void delaunay_init(struct delaunay* restrict d,
   d->vertex_tetrahedron_index = (int*)malloc(vertex_size * sizeof(int));
   d->search_radii = (double*)malloc(vertex_size * sizeof(double));
   d->vertex_size = vertex_size;
-  /* set vertex start and end (indicating where the local vertices start and
+  /* set vertex start and end (indicating where the local vertex_indices start and
    * end)*/
   d->vertex_start = 0;
   d->vertex_end = vertex_size;
-  /* we add the dummy vertices behind the local vertices and before the ghost
-   * vertices (see below) */
+  d->ghost_offset = 0;
+  /* we add the dummy vertex_indices behind the local vertex_indices and before the ghost
+   * vertex_indices (see below) */
   d->vertex_index = vertex_size;
 
   /* allocate memory for the tetrahedra array */
@@ -236,7 +242,7 @@ inline static void delaunay_init(struct delaunay* restrict d,
   d->tetrahedra_containing_vertex_size = 10;
 
   /* determine the size of a box large enough to accommodate the entire
-   * simulation volume and all possible ghost vertices required to deal with
+   * simulation volume and all possible ghost vertex_indices required to deal with
    * boundaries. Note that we convert the generally rectangular box to a
    * square. */
   double box_anchor[3] = {hs->anchor[0] - hs->side[0],
@@ -261,7 +267,7 @@ inline static void delaunay_init(struct delaunay* restrict d,
   /* initialise the structure used to perform exact geometrical tests */
   geometry3d_init(&d->geometry);
 
-  /* set up vertices for large initial tetrahedron */
+  /* set up vertex_indices for large initial tetrahedron */
   int v0 = delaunay_new_vertex(d, d->anchor[0], d->anchor[1], d->anchor[2]);
   int v1 = delaunay_new_vertex(d, d->anchor[0] + box_side, d->anchor[1],
                                d->anchor[2]);
@@ -275,16 +281,16 @@ inline static void delaunay_init(struct delaunay* restrict d,
   int dummy2 = delaunay_new_tetrahedron(d); /* opposite of v2 */
   int dummy3 = delaunay_new_tetrahedron(d); /* opposite of v3 */
   int first_tetrahedron = delaunay_new_tetrahedron(d);
-  delaunay_log("Creating dummy tetrahedron at %i with vertices: %i %i %i %i",
+  delaunay_log("Creating dummy tetrahedron at %i with vertex_indices: %i %i %i %i",
                dummy0, v1, v2, v3, -1);
   tetrahedron_init(&d->tetrahedra[dummy0], v1, v2, v3, -1);
-  delaunay_log("Creating dummy tetrahedron at %i with vertices: %i %i %i %i",
+  delaunay_log("Creating dummy tetrahedron at %i with vertex_indices: %i %i %i %i",
                dummy1, v2, v0, v3, -1);
   tetrahedron_init(&d->tetrahedra[dummy1], v2, v0, v3, -1);
-  delaunay_log("Creating dummy tetrahedron at %i with vertices: %i %i %i %i",
+  delaunay_log("Creating dummy tetrahedron at %i with vertex_indices: %i %i %i %i",
                dummy2, v3, v0, v1, -1);
   tetrahedron_init(&d->tetrahedra[dummy2], v3, v0, v1, -1);
-  delaunay_log("Creating dummy tetrahedron at %i with vertices: %i %i %i %i",
+  delaunay_log("Creating dummy tetrahedron at %i with vertex_indices: %i %i %i %i",
                dummy3, v0, v2, v1, -1);
   tetrahedron_init(&d->tetrahedra[dummy3], v0, v2, v1, -1);
   delaunay_init_tetrahedron(d, first_tetrahedron, v0, v1, v2, v3);
@@ -340,11 +346,11 @@ inline static int delaunay_new_tetrahedron(struct delaunay* restrict d) {
  *
  * @param d Delaunay tesselation
  * @param t Index to initialize tetrahedron at
- * @param v0, v1, v2, v3 Indices of the vertices of the tetrahedron
+ * @param v0, v1, v2, v3 Indices of the vertex_indices of the tetrahedron
  */
 inline static void delaunay_init_tetrahedron(struct delaunay* d, int t, int v0,
                                              int v1, int v2, int v3) {
-  delaunay_log("Initializing tetrahedron at %i with vertices: %i %i %i %i", t,
+  delaunay_log("Initializing tetrahedron at %i with vertex_indices: %i %i %i %i", t,
                v0, v1, v2, v3);
 #ifdef DELAUNAY_CHECKS
   const int test = delaunay_test_orientation(d, v0, v1, v2, v3);
@@ -407,7 +413,7 @@ inline static void delaunay_init_vertex(struct delaunay* restrict d,
   d->integer_vertices[3 * v + 1] = delaunay_double_to_int(rescaled_y);
   d->integer_vertices[3 * v + 2] = delaunay_double_to_int(rescaled_z);
 
-  /* Initialise the variables that keep track of the link between vertices
+  /* Initialise the variables that keep track of the link between vertex_indices
    * and tetrahedra. We use negative values so that we can later detect missing
    * links. */
   d->vertex_tetrahedron_links[v] = -1;
@@ -575,7 +581,7 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
     const int v1 = tetrahedron->vertices[1];
     const int v2 = tetrahedron->vertices[2];
     const int v3 = tetrahedron->vertices[3];
-    /* Get the coordinates of the vertices of the tetrahedron */
+    /* Get the coordinates of the vertex_indices of the tetrahedron */
 #ifdef DELAUNAY_NONEXACT
     const double ax = d->vertices[3 * v0];
     const double ay = d->vertices[3 * v0 + 1];
@@ -700,7 +706,7 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
           axis_idx0 != axis_idx1 && axis_idx0 != non_axis_idx0 &&
           axis_idx0 != non_axis_idx1 && axis_idx1 != non_axis_idx0 &&
           axis_idx1 != non_axis_idx1 && non_axis_idx0 != non_axis_idx1);
-      /* a0 and a1 are the vertices shared by all tetrahedra */
+      /* a0 and a1 are the vertex_indices shared by all tetrahedra */
       const int a0 = tetrahedron->vertices[axis_idx0];
       const int a1 = tetrahedron->vertices[axis_idx1];
       /* We now walk around the axis and add all tetrahedra to the list of
@@ -744,10 +750,10 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
  *
  * @image html newvoronoicell_one_to_four_flip.png
  *
- * The original tetrahedron is positively oriented, and hence its vertices are
+ * The original tetrahedron is positively oriented, and hence its vertex_indices are
  * ordered as shown in the figure. We construct four new tetrahedra by replacing
- * one of the four original vertices with the new vertex. If we keep the
- * ordering of the vertices, then the new tetrahedra will also be positively
+ * one of the four original vertex_indices with the new vertex. If we keep the
+ * ordering of the vertex_indices, then the new tetrahedra will also be positively
  * oriented. The new neighbour relations can be easily deduced from the figure,
  * and the new index relations follow automatically from the way we construct
  * the new tetrahedra.
@@ -815,7 +821,7 @@ inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t) {
  * @image html newvoronoicell_two_to_six_flip.png
  *
  * The two positively oriented tetrahedra (0123) and (0134) are replaced with
- * six new ones by replacing the common triangle vertices one at a time: (0125),
+ * six new ones by replacing the common triangle vertex_indices one at a time: (0125),
  * (0523), (5123), (0154), (0534), and (5134). The new neighbour relations can
  * be easily deduced from the figure, while the new neighbour indices follow
  * automatically from the way we set up the tetrahedra.
@@ -826,7 +832,7 @@ inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t) {
  */
 inline static void delaunay_two_to_six_flip(struct delaunay* d, int v,
                                             const int* t) {
-  /* Find the indices of the vertices of the common triangle in both tetrahedra
+  /* Find the indices of the vertex_indices of the common triangle in both tetrahedra
    */
   int triangle_indices[2][3];
   int num_vertices = 0;
@@ -969,7 +975,7 @@ inline static void delaunay_two_to_six_flip(struct delaunay* d, int v,
  */
 inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v,
                                          const int* t, int n) {
-  /* find the indices of the common axis vertices in all tetrahedra */
+  /* find the indices of the common axis vertex_indices in all tetrahedra */
   int axis_idx_in_tj[n][2];
   int tn_min_1_idx_in_t0 = 0;
   int num_axis = 0;
@@ -999,7 +1005,7 @@ inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v,
       tn_min_1_idx_in_t0 = current_vertex_idx_in_tj[0];
     }
   }
-  /* Found both vertices of the edge shared by all tetrahedra? */
+  /* Found both vertex_indices of the edge shared by all tetrahedra? */
   delaunay_assert(num_axis == 2);
 
   /* now make sure we give the indices the same meaning as in the figure */
@@ -1101,10 +1107,10 @@ inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v,
  * neighbours, t'1 has ngb3 and ngb4 as neighbours, and t'2 has ngb0 and ngb1
  * as neighbours.
  *
- * We first figure out the indices of the common triangle vertices v0, v1 and v3
+ * We first figure out the indices of the common triangle vertex_indices v0, v1 and v3
  * in both tetrahedra. Once we know these, it is very straigthforward to match
- * each index to one of these three vertices (requiring that t0 is positively
- * oriented). We can then get the actual vertices, neighbours and neighbour
+ * each index to one of these three vertex_indices (requiring that t0 is positively
+ * oriented). We can then get the actual vertex_indices, neighbours and neighbour
  * indices and construct the new tetrahedra.
  *
  * @param d Delaunay tessellation
@@ -1130,7 +1136,7 @@ inline static void delaunay_two_to_three_flip(struct delaunay* restrict d,
     }
   }
   /* Make sure that we start from a positively oriented tetrahedron. The weird
-   * index ordering is chosen to match the vertices in the documentation figure
+   * index ordering is chosen to match the vertex_indices in the documentation figure
    */
   if (!positive_permutation(triangle[0][1], triangle[0][2], top0,
                             triangle[0][0])) {
@@ -1224,13 +1230,13 @@ inline static void delaunay_two_to_three_flip(struct delaunay* restrict d,
  *
  * The first thing we do is figure out how the internal vertex indices of the
  * four tetrahedra map to the names in the figure. We do this by identifying the
- * indices of the common axis vertices v0 and v1 in all tetrahedra, and the
+ * indices of the common axis vertex_indices v0 and v1 in all tetrahedra, and the
  * index of v2 in t0. Once we know v0, v1 and v2 in t0, we can deduce the index
  * of v3 in in t0, and require that (v0 v1 v2 v3) is positively oriented (if
  * not, we swap v0 and v1 in all tetrahedra so that it is).
  *
  * Once the indices have been mapped, it is straightforward to deduce the
- * actual vertices, neighbours and neighbour indices, and we can simply
+ * actual vertex_indices, neighbours and neighbour indices, and we can simply
  * construct the new tetrahedra based on the figure.
  *
  * @param d Delaunay tessellation
@@ -1395,7 +1401,7 @@ inline static void delaunay_four_to_four_flip(struct delaunay* restrict d,
  * the two axis indices corresponds to v2 and which to v4 by requiring that the
  * four indices are a positively oriented permutation of 0123. Once this is
  * done, it is very straightforward to obtain the other indices in the other
- * tetrahedra. We can then get the actual vertices, neighbours and neighbour
+ * tetrahedra. We can then get the actual vertex_indices, neighbours and neighbour
  * indices, and construct the two new tetrahedra.
  *
  * Note that because this flip removes a tetrahedron, it will free up a spot in
@@ -1600,7 +1606,7 @@ inline static int delaunay_check_tetrahedron(struct delaunay* d, const int t,
     return -1;
   }
 
-  /* Get the coordinates of all vertices */
+  /* Get the coordinates of all vertex_indices */
 #ifdef DELAUNAY_NONEXACT
   // TODO
 #endif
@@ -1657,7 +1663,7 @@ inline static int delaunay_check_tetrahedron(struct delaunay* d, const int t,
     } else if (tests[i] == 0) {
       /* degenerate case: possible 4 to 4 flip needed. The line that connects v
        * and v4 intersects an edge of the triangle formed by the other 3
-       * vertices of t. If that edge is shared by exactly 4 tetrahedra in total,
+       * vertex_indices of t. If that edge is shared by exactly 4 tetrahedra in total,
        * the 2 neighbours are involved in the 4 to 4 flip. If it isn't, we
        * cannot solve this situation now, it will be solved later by another
        * flip. */
@@ -1692,7 +1698,7 @@ inline static int delaunay_check_tetrahedron(struct delaunay* d, const int t,
       delaunay_assert(tests[i] > 0);
       /* Outside: possible 3 to 2 flip.
        * The line that connects 'new_vertex' and 'v4' lies outside an edge of
-       * the triangle formed by the other 3 vertices of 'tetrahedron'. We need
+       * the triangle formed by the other 3 vertex_indices of 'tetrahedron'. We need
        * to check if the neighbouring tetrahedron opposite the non-edge point
        * of that triangle is the same for 't' and 'ngb'. If it is, that is the
        * third tetrahedron for the 3 to 2 flip. If it is not, we cannot solve
@@ -1829,10 +1835,13 @@ inline static void delaunay_append_tetrahedron_containing_vertex(
 }
 
 inline static void delaunay_consolidate(struct delaunay* restrict d) {
+  /* Set ghost offset. Any vertex_indices added from this point onward will be
+   * considered ghost vertex_indices. */
+  d->ghost_offset = d->vertex_index;
   /* perform a consistency test if enabled */
   delaunay_check_tessellation(d);
 #ifdef DELAUNAY_CHECKS
-  /* loop over all vertices to check vertex-tetrahedron links */
+  /* loop over all vertex_indices to check vertex-tetrahedron links */
   for (int v = 0; v < d->vertex_end; v++) {
     int t_idx = d->vertex_tetrahedron_links[v];
     struct tetrahedron* t = &d->tetrahedra[t_idx];
@@ -1989,8 +1998,8 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
 
 /**
  * @brief Check if abcd is a positive permutation of 0123 (meaning that if
- * 0123 are the vertices of a positively ordered tetrahedron, then abcd are
- * also the vertices of a positively ordered tetrahedron).
+ * 0123 are the vertex_indices of a positively ordered tetrahedron, then abcd are
+ * also the vertex_indices of a positively ordered tetrahedron).
  *
  * @param a First index.
  * @param b Second index.

@@ -10,12 +10,12 @@
  *
  * A tetrahedron connects 4 points in 3D space, has 6 edges and 4 faces.
  *
- * In this struct, we store the indices of the 4 vertices, the indices of the
+ * In this struct, we store the indices of the 4 vertex_indices, the indices of the
  * neighbouring tetrahedra (that share a face with this tetrahedron) and the
  * indices of this tetrahedron in the neighbour lists of its neighbours.
  *
  * Conventions:
- * 1. neighbours[i] is the tetrahedron sharing the face oposite of vertices[i].
+ * 1. neighbours[i] is the tetrahedron sharing the face oposite of vertex_indices[i].
  * 2. index_in_neighbours follows the same ordering as neighbours
  */
 struct tetrahedron {
@@ -36,7 +36,7 @@ struct tetrahedron {
 };
 
 /**
- * @brief Initialize a tetrahedron with the given vertices.
+ * @brief Initialize a tetrahedron with the given vertex_indices.
  *
  * Neighbour information is set to nonsensical negative values
  *

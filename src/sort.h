@@ -43,12 +43,12 @@ int compare_unsigned_long(const unsigned long a, const unsigned long b) {
 }
 
 /**
- * @brief Sorting function used to sort vertices along the horizontal direction.
+ * @brief Sorting function used to sort vertex_indices along the horizontal direction.
  *
  * @param a First index.
  * @param b Second index.
  * @param x Vertex array to sort.
- * @return Return value of compare_double() for the x-coordinates of vertices a
+ * @return Return value of compare_double() for the x-coordinates of vertex_indices a
  * and b.
  */
 int sort_x_comp(const void *a, const void *b, void *x) {
@@ -61,12 +61,12 @@ int sort_x_comp(const void *a, const void *b, void *x) {
 }
 
 /**
- * @brief Sorting function used to sort vertices along the vertical direction.
+ * @brief Sorting function used to sort vertex_indices along the vertical direction.
  *
  * @param a First index.
  * @param b Second index.
  * @param x Vertex array to sort.
- * @return Return value of compare_double() for the y-coordinates of vertices a
+ * @return Return value of compare_double() for the y-coordinates of vertex_indices a
  * and b.
  */
 int sort_y_comp(const void *a, const void *b, void *x) {
@@ -79,7 +79,7 @@ int sort_y_comp(const void *a, const void *b, void *x) {
 }
 
 /**
- * @brief Sorting function used to sort vertices along the first diagonal.
+ * @brief Sorting function used to sort vertex_indices along the first diagonal.
  *
  * The first diagonal is the line x = y.
  *
@@ -87,7 +87,7 @@ int sort_y_comp(const void *a, const void *b, void *x) {
  * @param b Second index.
  * @param x Vertex array to sort.
  * @return Return value of compare_double() for the diagonal sum value (x+y) of
- * the x- and y-coordinates of vertices a and b.
+ * the x- and y-coordinates of vertex_indices a and b.
  */
 int sort_xyp_comp(const void *a, const void *b, void *x) {
   int ai = *(int *)a;
@@ -101,7 +101,7 @@ int sort_xyp_comp(const void *a, const void *b, void *x) {
 }
 
 /**
- * @brief Sorting function used to sort vertices along the second diagonal.
+ * @brief Sorting function used to sort vertex_indices along the second diagonal.
  *
  * The second diagonal is the line x = -y.
  *
@@ -109,7 +109,7 @@ int sort_xyp_comp(const void *a, const void *b, void *x) {
  * @param b Second index.
  * @param x Vertex array to sort.
  * @return Return value of compare_double() for the diagonal difference value
- * (x-y) of the x- and y-coordinates of vertices a and b.
+ * (x-y) of the x- and y-coordinates of vertex_indices a and b.
  */
 int sort_xym_comp(const void *a, const void *b, void *x) {
   int ai = *(int *)a;
@@ -123,13 +123,13 @@ int sort_xym_comp(const void *a, const void *b, void *x) {
 }
 
 /**
- * @brief Sorting function used to sort vertices on their Hilbert key.
+ * @brief Sorting function used to sort vertex_indices on their Hilbert key.
  *
  * @param a First index.
  * @param b Second index.
  * @param x Hilbert key array to sort.
  * @return Return value of compare_unsigned_long() for the hilbert key of
- * vertices a and b.
+ * vertex_indices a and b.
  */
 int sort_h_comp(const void *a, const void *b, void *x) {
   int ai = *(int *)a;

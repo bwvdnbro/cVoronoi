@@ -63,10 +63,10 @@ inline static double geometry3d_orient() {
 
 /**
  * @brief Test the orientation of the tetrahedron that has the four given
- * points as vertices.
+ * points as vertex_indices.
  *
  * The test returns a positive result if the fourth vertex is below the plane
- * through the three other vertices, with above the direction from which the
+ * through the three other vertex_indices, with above the direction from which the
  * three points are ordered counterclockwise.
  *
  * E.g. if the four points are (0, 0, 0), (0, 0, 1), (0, 1, 0), and (1, 0, 0),
@@ -142,26 +142,26 @@ inline static double geometry3d_in_sphere() {
 
 /**
  * @brief Check if the fifth given point is inside (-1) the circumsphere of the
-   * tetrahedron formed by the other four given points.
-   *
-   * It is assumed that the first four points are the vertices of a positively
-   * oriented tetrahedron, as defined by a negative return value of orient3d().
-   *
-   * If the fifth point is exactly on the circumsphere of the tetrahedron, this
-   * functions returns 0.
-   *
+ * tetrahedron formed by the other four given points.
+ *
+ * It is assumed that the first four points are the vertex_indices of a positively
+ * oriented tetrahedron, as defined by a negative return value of orient3d().
+ *
+ * If the fifth point is exactly on the circumsphere of the tetrahedron, this
+ * functions returns 0.
+ *
  * @param g Geometry struct
  * @param ax, ay, az, bx, by, bz, cx, cy, cz, dx, dy, dz, ex, ey, ez Coordinates
- * of the vertices of the tetrahedron and the test point (e).
+ * of the vertex_indices of the tetrahedron and the test point (e).
  * @return -1, 0, or 1, depending on the outcome of the geometric test
  */
 inline static int geometry3d_in_sphere_exact(
-    struct geometry3d* restrict g, const unsigned long ax, const unsigned long ay,
-    const unsigned long az, const unsigned long bx, const unsigned long by,
-    const unsigned long bz, const unsigned long cx, const unsigned long cy,
-    const unsigned long cz, const unsigned long dx, const unsigned long dy,
-    const unsigned long dz, const unsigned long ex, const unsigned long ey,
-    const unsigned long ez) {
+    struct geometry3d* restrict g, const unsigned long ax,
+    const unsigned long ay, const unsigned long az, const unsigned long bx,
+    const unsigned long by, const unsigned long bz, const unsigned long cx,
+    const unsigned long cy, const unsigned long cz, const unsigned long dx,
+    const unsigned long dy, const unsigned long dz, const unsigned long ex,
+    const unsigned long ey, const unsigned long ez) {
   /* store the input coordinates into the temporary large integer variables */
   mpz_set_ui(g->aix, ax);
   mpz_set_ui(g->aiy, ay);
@@ -219,7 +219,6 @@ inline static int geometry3d_in_sphere_exact(
   mpz_mul(g->bd, g->s2x, g->s4y);
   mpz_submul(g->bd, g->s4x, g->s2y);
 
-
   /* compute the result in 4 steps */
   mpz_set_ui(g->result, 0);
 
@@ -256,6 +255,58 @@ inline static int geometry3d_in_sphere_exact(
   mpz_submul(g->result, g->tmp1, g->tmp2);
 
   return mpz_sgn(g->result);
+}
+
+/**
+ * @brief Compute the coordinates of the circumcenter of the tetrahedron
+ * (v0, v1, v2, v3).
+ *
+ * See https://mathworld.wolfram.com/Circumsphere.html
+ *
+ * @param v0x, v0y, v0z, v1x, v1y, v1z, v2x, v2y, v2z, v3x, v3y, v3z Coordinates
+ * of the corners of the tetrahedron.
+ * @param circumcenter (Returned) coordinates of center of circumsphere
+ * @param Ry (Returned) y coordinate of center of circumsphere
+ * @param Rz (Returned) z coordinate of center of circumsphere
+ */
+static inline void geometry3d_compute_circumcenter(
+    double v0x, double v0y, double v0z, double v1x, double v1y, double v1z,
+    double v2x, double v2y, double v2z, double v3x, double v3y, double v3z,
+    double* circumcenter) {
+  /* Compute relative coordinates */
+  const double r1x = v1x - v0x;
+  const double r1y = v1y - v0y;
+  const double r1z = v1z - v0z;
+  const double r2x = v2x - v0x;
+  const double r2y = v2y - v0y;
+  const double r2z = v2z - v0z;
+  const double r3x = v3x - v0x;
+  const double r3y = v3y - v0y;
+  const double r3z = v3z - v0z;
+
+  /* Compute squared norm of relative coordinates */
+  const double r1_sqrd = r1x * r1x + r1y * r1y + r1z * r1z;
+  const double r2_sqrd = r2x * r2x + r2y * r2y + r2z * r2z;
+  const double r3_sqrd = r3x * r3x + r3y * r3y + r3z * r3z;
+
+  const double Dx = r1_sqrd * (r2y * r3z - r3y * r2z) -
+                    r2_sqrd * (r1y * r3z - r3y * r1z) +
+                    r3_sqrd * (r1y * r2z - r2y * r1z);
+  const double Dy = -r1_sqrd * (r2x * r3z - r3x * r2z) +
+                    r2_sqrd * (r1x * r3z - r3x * r1z) -
+                    r3_sqrd * (r1x * r2z - r2x * r1z);
+  const double Dz = r1_sqrd * (r2x * r3y - r3x * r2y) -
+                    r2_sqrd * (r1x * r3y - r3x * r1y) +
+                    r3_sqrd * (r1x * r2y - r2x * r1y);
+
+  const double a = r1x * (r2y * r3z - r3y * r2z) -
+                   r2x * (r1y * r3z - r3y * r1z) +
+                   r3x * (r1y * r2z - r2y * r1z);
+
+  const double denominator = 2. * a;
+  circumcenter[0] = Dx / denominator + v0x;
+  circumcenter[1] = Dy / denominator + v0y;
+  circumcenter[2] = Dz / denominator + v0z;
 }
 
 #endif  // CVORONOI_GEOMETRY3D_H
