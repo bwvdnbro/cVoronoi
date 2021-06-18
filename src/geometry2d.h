@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 /**
- * @file geometry.h
+ * @file geometry2d.h
  *
  * @brief Arbitrary exact and non-exact geometrical tests.
  *
@@ -35,7 +35,7 @@
  * and deallocating these variables poses a significant overhead, they are best
  * reused.
  */
-struct geometry {
+struct geometry2d {
   /*! @brief Arbitrary exact vertex coordinates */
   mpz_t aix, aiy, bix, biy, cix, ciy, dix, diy;
 
@@ -51,24 +51,24 @@ struct geometry {
 };
 
 /**
- * @brief Initialize the geometry object.
+ * @brief Initialize the geometry2d object.
  *
  * This allocates and initialises the auxiliary arbitrary precision variables.
  *
  * @param g Geometry object.
  */
-inline static void geometry_init(struct geometry* restrict g) {
+inline static void geometry2d_init(struct geometry2d* restrict g) {
   mpz_inits(g->aix, g->aiy, g->bix, g->biy, g->cix, g->ciy, g->dix, g->diy,
             g->s1x, g->s1y, g->s2x, g->s2y, g->s3x, g->s3y, g->tmp1, g->tmp2,
             g->result, NULL);
 }
 
 /**
- * @brief Deallocate all memory occupied by the geometry object.
+ * @brief Deallocate all memory occupied by the geometry2d object.
  *
  * @param g Geometry object.
  */
-inline static void geometry_destroy(struct geometry* restrict g) {
+inline static void geometry2d_destroy(struct geometry2d* restrict g) {
   mpz_clears(g->aix, g->aiy, g->bix, g->biy, g->cix, g->ciy, g->dix, g->diy,
              g->s1x, g->s1y, g->s2x, g->s2y, g->s3x, g->s3y, g->tmp1, g->tmp2,
              g->result, NULL);
@@ -97,7 +97,7 @@ inline static void geometry_destroy(struct geometry* restrict g) {
  * @param cx, cy Third point.
  * @return Signed double area of the triangle formed by a, b and c.
  */
-inline static double geometry_orient(double ax, double ay, double bx, double by,
+inline static double geometry2d_orient(double ax, double ay, double bx, double by,
                                      double cx, double cy) {
 
   /* the code below stays as close as possible to the implementation of the
@@ -131,8 +131,8 @@ inline static double geometry_orient(double ax, double ay, double bx, double by,
  * @param g Geometry object (containing temporary variables that will be used).
  * @param ax, ay, bx, by, cx, cy Integer coordinates of the three points.
  */
-inline static int geometry_orient_exact(
-    struct geometry* restrict g, unsigned long int ax, unsigned long int ay,
+inline static int geometry2d_orient_exact(
+    struct geometry2d* restrict g, unsigned long int ax, unsigned long int ay,
     unsigned long int bx, unsigned long int by, unsigned long int cx,
     unsigned long int cy) {
 
@@ -167,7 +167,7 @@ inline static int geometry_orient_exact(
  *
  * This test determines whether the point d is inside the circle through the
  * points a, b and c. Assuming a, b and c are positively oriented (positive
- * return value of geometry_orient()), a negative return value means d is
+ * return value of geometry2d_orient()), a negative return value means d is
  * outside the circle and a positive value it is inside. A return value of 0
  * means d lies on the circle.
  *
@@ -189,7 +189,7 @@ inline static int geometry_orient_exact(
  * @param cx, cy Third point.
  * @param dx, dy Fourth point.
  */
-inline static double geometry_in_sphere(double ax, double ay, double bx,
+inline static double geometry2d_in_sphere(double ax, double ay, double bx,
                                         double by, double cx, double cy,
                                         double dx, double dy) {
 
@@ -233,7 +233,7 @@ inline static double geometry_in_sphere(double ax, double ay, double bx,
 }
 
 /**
- * @brief Arbitrary exact alternative for geometry_in_sphere().
+ * @brief Arbitrary exact alternative for geometry2d_in_sphere().
  *
  * This function calculates exactly the same thing as the non-exact version, but
  * does so in an integer coordinate basis, using arbitrarily large integers.
@@ -244,8 +244,8 @@ inline static double geometry_in_sphere(double ax, double ay, double bx,
  * @param g Geometry object (containing temporary variables that will be used).
  * @param ax, ay, bx, by, cx, cy, dx, dy Integer coordinates of the four points.
  */
-inline static int geometry_in_sphere_exact(
-    struct geometry* restrict g, unsigned long int ax, unsigned long int ay,
+inline static int geometry2d_in_sphere_exact(
+    struct geometry2d* restrict g, unsigned long int ax, unsigned long int ay,
     unsigned long int bx, unsigned long int by, unsigned long int cx,
     unsigned long int cy, unsigned long int dx, unsigned long int dy) {
 

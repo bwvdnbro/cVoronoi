@@ -167,9 +167,9 @@ struct delaunay {
   int last_tetrahedron;
 
   /*! @brief Geometry variables. Auxiliary variables used by the exact integer
-   *  geometry tests that need to be stored in between tests, since allocating
+   *  geometry3d tests that need to be stored in between tests, since allocating
    *  and deallocating them for every test is too expensive. */
-  struct geometry geometry;
+  struct geometry3d geometry;
 };
 
 /**
@@ -259,7 +259,7 @@ inline static void delaunay_init(struct delaunay* restrict d,
   d->inverse_side = (1. - 1.e-13) / box_side;
 
   /* initialise the structure used to perform exact geometrical tests */
-  geometry_init(&d->geometry);
+  geometry3d_init(&d->geometry);
 
   /* set up vertices for large initial tetrahedron */
   int v0 = delaunay_new_vertex(d, d->anchor[0], d->anchor[1], d->anchor[2]);
@@ -313,7 +313,7 @@ inline static void delaunay_destroy(struct delaunay* restrict d) {
   free(d->search_radii);
   free(d->tetrahedra);
   free(d->tetrahedron_queue);
-  geometry_destroy(&d->geometry);
+  geometry3d_destroy(&d->geometry);
 }
 
 inline static int delaunay_new_tetrahedron(struct delaunay* restrict d) {
@@ -611,8 +611,8 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
 
 #ifdef DELAUNAY_CHECKS
     /* made sure the tetrahedron is correctly oriented */
-    if (geometry_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz, cix,
-                              ciy, ciz, dix, diy, diz) >= 0) {
+    if (geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz, cix,
+                                ciy, ciz, dix, diy, diz) >= 0) {
       fprintf(stderr, "Incorrect orientation for tetrahedron %i!",
               tetrahedron_idx);
       abort();
@@ -621,32 +621,32 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
     int non_axis_v_idx[2];
     /* Check whether the point is inside or outside all four faces */
     const int test_abce =
-        geometry_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz, cix,
-                              ciy, ciz, eix, eiy, eiz);
+        geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz, cix,
+                                ciy, ciz, eix, eiy, eiz);
     if (test_abce > 0) {
       /* v outside face opposite of v3 */
       tetrahedron_idx = tetrahedron->neighbours[3];
       continue;
     }
     const int test_acde =
-        geometry_orient_exact(&d->geometry, aix, aiy, aiz, cix, ciy, ciz, dix,
-                              diy, diz, eix, eiy, eiz);
+        geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, cix, ciy, ciz, dix,
+                                diy, diz, eix, eiy, eiz);
     if (test_acde > 0) {
       /* v outside face opposite of v1 */
       tetrahedron_idx = tetrahedron->neighbours[1];
       continue;
     }
     const int test_adbe =
-        geometry_orient_exact(&d->geometry, aix, aiy, aiz, dix, diy, diz, bix,
-                              biy, biz, eix, eiy, eiz);
+        geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, dix, diy, diz, bix,
+                                biy, biz, eix, eiy, eiz);
     if (test_adbe > 0) {
       /* v outside face opposite of v2 */
       tetrahedron_idx = tetrahedron->neighbours[2];
       continue;
     }
     const int test_bdce =
-        geometry_orient_exact(&d->geometry, bix, biy, biz, dix, diy, diz, cix,
-                              ciy, ciz, eix, eiy, eiz);
+        geometry3d_orient_exact(&d->geometry, bix, biy, biz, dix, diy, diz, cix,
+                                ciy, ciz, eix, eiy, eiz);
     if (test_bdce > 0) {
       /* v outside face opposite of v0 */
       tetrahedron_idx = tetrahedron->neighbours[0];
@@ -1625,27 +1625,27 @@ inline static int delaunay_check_tetrahedron(struct delaunay* d, const int t,
   const unsigned long eiz = d->integer_vertices[3 * v4 + 2];
 
   const int test =
-      geometry_in_sphere_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz, cix,
-                               ciy, ciz, dix, diy, diz, eix, eiy, eiz);
+      geometry3d_in_sphere_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz,
+                                 cix, ciy, ciz, dix, diy, diz, eix, eiy, eiz);
   if (test < 0) {
     delaunay_log("Tetrahedron %i was invalidated by adding vertex %i", t, v);
     /* Figure out which flip is needed to restore the tetrahedra */
     int tests[4] = {-1, -1, -1, -1};
     if (top != 3) {
-      tests[0] = geometry_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy,
-                                       biz, cix, ciy, ciz, eix, eiy, eiz);
+      tests[0] = geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy,
+                                         biz, cix, ciy, ciz, eix, eiy, eiz);
     }
     if (top != 2) {
-      tests[1] = geometry_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy,
-                                       biz, eix, eiy, eiz, dix, diy, diz);
+      tests[1] = geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy,
+                                         biz, eix, eiy, eiz, dix, diy, diz);
     }
     if (top != 1) {
-      tests[2] = geometry_orient_exact(&d->geometry, aix, aiy, aiz, eix, eiy,
-                                       eiz, cix, ciy, ciz, dix, diy, diz);
+      tests[2] = geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, eix, eiy,
+                                         eiz, cix, ciy, ciz, dix, diy, diz);
     }
     if (top != 0) {
-      tests[3] = geometry_orient_exact(&d->geometry, eix, eiy, eiz, bix, biy,
-                                       biz, cix, ciy, ciz, dix, diy, diz);
+      tests[3] = geometry3d_orient_exact(&d->geometry, eix, eiy, eiz, bix, biy,
+                                         biz, cix, ciy, ciz, dix, diy, diz);
     }
     int i;
     for (i = 0; i < 4 && tests[i] < 0; ++i) {
@@ -1886,8 +1886,8 @@ inline static int delaunay_test_orientation(struct delaunay* restrict d, int v0,
   const unsigned long diy = d->integer_vertices[3 * v3 + 1];
   const unsigned long diz = d->integer_vertices[3 * v3 + 2];
 
-  return geometry_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz, cix,
-                               ciy, ciz, dix, diy, diz);
+  return geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz,
+                                 cix, ciy, ciz, dix, diy, diz);
 }
 
 inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
@@ -1973,9 +1973,9 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
       unsigned long int eiy = d->integer_vertices[3 * vertex_to_check + 1];
       unsigned long int eiz = d->integer_vertices[3 * vertex_to_check + 2];
 
-      int test =
-          geometry_in_sphere_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz,
-                                   cix, ciy, ciz, dix, diy, diz, eix, eiy, eiz);
+      int test = geometry3d_in_sphere_exact(&d->geometry, aix, aiy, aiz, bix,
+                                            biy, biz, cix, ciy, ciz, dix, diy,
+                                            diz, eix, eiy, eiz);
       if (test < 0) {
         fprintf(stderr, "Failed in-sphere test, value: %i!\n", test);
         fprintf(stderr, "\tTetrahedron %i: %i %i %i %i\n", t0, vt0_0, vt0_1,

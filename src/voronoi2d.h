@@ -268,7 +268,7 @@ static inline void voronoi_init(struct voronoi *restrict v,
     v->vertex_offset[i] = c0;
     v->connections[c0] = t0 - 3;
 
-    /* store the current vertex position for geometry calculations */
+    /* store the current vertex position for geometry2d calculations */
     double cx = v->vertices[2 * v->connections[c0]];
     double cy = v->vertices[2 * v->connections[c0] + 1];
 
@@ -284,11 +284,11 @@ static inline void voronoi_init(struct voronoi *restrict v,
       int c1 = voronoi_add_connection(v);
       v->connections[c1] = t1 - 3;
 
-      /* get the current vertex position for geometry calculations.
+      /* get the current vertex position for geometry2d calculations.
          Each calculation involves the current and the previous vertex.
-         The face geometry is completely determined by these (the face is in
+         The face geometry2d is completely determined by these (the face is in
          this case simply the line segment between (bx,by) and (cx,cy).
-         The cell geometry is calculated by accumulating the centroid and
+         The cell geometry2d is calculated by accumulating the centroid and
          "volume" for the triangle (ax, ay) - (bx, by) - (cx, cy). */
       double bx = cx;
       double by = cy;
@@ -309,7 +309,7 @@ static inline void voronoi_init(struct voronoi *restrict v,
       t1 = d->triangles[t1].neighbours[vi1p2];
     }
 
-    /* don't forget the last edge for the geometry! */
+    /* don't forget the last edge for the geometry2d! */
     double bx = cx;
     double by = cy;
     cx = v->vertices[2 * v->connections[c0]];

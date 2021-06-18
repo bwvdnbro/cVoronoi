@@ -12,7 +12,7 @@
  * and deallocating these variables poses a significant overhead, they are best
  * reused.
  */
-struct geometry {
+struct geometry3d {
   /*! @brief Arbitrary exact vertex coordinates */
   mpz_t aix, aiy, aiz, bix, biy, biz, cix, ciy, ciz, dix, diy, diz, eix, eiy,
       eiz;
@@ -29,13 +29,13 @@ struct geometry {
 };
 
 /**
- * @brief Initialize the geometry object.
+ * @brief Initialize the geometry3d object.
  *
  * This allocates and initialises the auxiliary arbitrary precision variables.
  *
  * @param g Geometry object.
  */
-inline static void geometry_init(struct geometry* restrict g) {
+inline static void geometry3d_init(struct geometry3d* restrict g) {
   mpz_inits(g->aix, g->aiy, g->aiz, g->bix, g->biy, g->biz, g->cix, g->ciy,
             g->ciz, g->dix, g->diy, g->diz, g->eix, g->eiy, g->eiz, g->s1x,
             g->s1y, g->s1z, g->s2x, g->s2y, g->s2z, g->s3x, g->s3y, g->s3z,
@@ -44,11 +44,11 @@ inline static void geometry_init(struct geometry* restrict g) {
 }
 
 /**
- * @brief Deallocate all memory occupied by the geometry object.
+ * @brief Deallocate all memory occupied by the geometry3d object.
  *
  * @param g Geometry object.
  */
-inline static void geometry_destroy(struct geometry* restrict g) {
+inline static void geometry3d_destroy(struct geometry3d* restrict g) {
   mpz_clears(g->aix, g->aiy, g->aiz, g->bix, g->biy, g->biz, g->cix, g->ciy,
              g->ciz, g->dix, g->diy, g->diz, g->eix, g->eiy, g->eiz, g->s1x,
              g->s1y, g->s1z, g->s2x, g->s2y, g->s2z, g->s3x, g->s3y, g->s3z,
@@ -56,7 +56,7 @@ inline static void geometry_destroy(struct geometry* restrict g) {
              g->da, g->ac, g->bd, g->result, NULL);
 }
 
-inline static double geometry_orient() {
+inline static double geometry3d_orient() {
   // TODO
   return -1.;
 }
@@ -80,8 +80,8 @@ inline static double geometry_orient() {
  * @param d Fourth vertex.
  * @return -1, 0, or 1, depending on the orientation of the tetrahedron.
  */
-inline static int geometry_orient_exact(
-    struct geometry* g, const unsigned long ax, const unsigned long ay,
+inline static int geometry3d_orient_exact(
+    struct geometry3d* g, const unsigned long ax, const unsigned long ay,
     const unsigned long az, const unsigned long bx, const unsigned long by,
     const unsigned long bz, const unsigned long cx, const unsigned long cy,
     const unsigned long cz, const unsigned long dx, const unsigned long dy,
@@ -135,7 +135,7 @@ inline static int geometry_orient_exact(
   return mpz_sgn(g->result);
 }
 
-inline static double geometry_in_sphere() {
+inline static double geometry3d_in_sphere() {
   // TODO
   return -1.;
 }
@@ -155,8 +155,8 @@ inline static double geometry_in_sphere() {
  * of the vertices of the tetrahedron and the test point (e).
  * @return -1, 0, or 1, depending on the outcome of the geometric test
  */
-inline static int geometry_in_sphere_exact(
-    struct geometry* restrict g, const unsigned long ax, const unsigned long ay,
+inline static int geometry3d_in_sphere_exact(
+    struct geometry3d* restrict g, const unsigned long ax, const unsigned long ay,
     const unsigned long az, const unsigned long bx, const unsigned long by,
     const unsigned long bz, const unsigned long cx, const unsigned long cy,
     const unsigned long cz, const unsigned long dx, const unsigned long dy,

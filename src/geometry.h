@@ -5,11 +5,9 @@
 #ifndef CVORONOI_GEOMETRY_H
 #define CVORONOI_GEOMETRY_H
 
-#include "dimensionality.h"
-
-#if defined(DIMENSIONALITY_2D)
 #include "geometry2d.h"
-#else
+#include "dimensionality.h"
+#if defined(DIMENSIONALITY_3D)
 #include "geometry3d.h"
 #endif
 
