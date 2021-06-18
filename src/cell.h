@@ -218,7 +218,7 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
      the number of triangles with circumcircles larger than the current search
      radius */
   int count = delaunay_update_search_radii(&c->d, old_r);
-  printf("count: %i\n", count);
+//  printf("count: %i\n", count);
   while (count > 0) {
     /* add ghosts for the positive horizontal boundary */
     int i = 0;
@@ -358,7 +358,7 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
     /* update the search radii to the new value and count the number of larger
        circumcircles. */
     count = delaunay_update_search_radii(&c->d, r);
-    printf("count: %i\n", count);
+//    printf("count: %i\n", count);
 
     /* we do not want to add the same ghost twice (this causes the incremental
        construction algorithm to crash), so we need to keep track of the
@@ -411,12 +411,12 @@ static inline void cell_lloyd_relax_vertices(struct cell *c) {
   for (int i = 0; i < c->count; ++i) {
     int j = c->r_sort_lists[4][i];
 #if defined(DIMENSIONALITY_2D)
-    c->vertices[3 * j] = c->v.cell_centroid[2 * i];
-    c->vertices[3 * j + 1] = c->v.cell_centroid[2 * i + 1];
+    c->vertices[3 * j] = c->v.cells[i].centroid[0];
+    c->vertices[3 * j + 1] = c->v.cells[i].centroid[1];
 #else
-    c->vertices[3 * j] = c->v.cell_centroid[2 * i];
-    c->vertices[3 * j + 1] = c->v.cell_centroid[2 * i + 1];
-    c->vertices[3 * j + 2] = c->v.cell_centroid[2 * i + 2];
+    c->vertices[3 * j] = c->v.cells[i].centroid[0];
+    c->vertices[3 * j + 1] = c->v.cells[i].centroid[1];
+    c->vertices[3 * j + 2] = c->v.cells[i].centroid[2];
 #endif
   }
   /* Destroy existing tesselations */

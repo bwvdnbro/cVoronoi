@@ -20,7 +20,7 @@ ms = np.fromregex(
     args.file, "M\s+(\S+)\s+(\S+)", [("x", np.float64), ("y", np.float64)]
 )
 fs = np.fromregex(
-    args.file, "F\s+(\S+)\s+(\S+)", [("x", np.float64), ("y", np.float64)]
+    args.file, "F\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)", [("x0", np.float64), ("y0", np.float64), ("x1", np.float64), ("y1", np.float64)]
 )
 vs = np.fromregex(
     args.file, "V\s+(\S+)\s+(\S+)", [("x", np.float64), ("y", np.float64)]
@@ -31,10 +31,11 @@ cs = np.fromregex(
 
 print(gs.shape, vs.shape)
 
-for ci in range(len(cs)):
-    c = cs[ci]
-    it = [c["v0"], c["v1"]]
-    pl.plot(vs[it]["x"], vs[it]["y"], "r-")
+for fi in range(len(fs)):
+    f = fs[fi]
+    x = [f["x0"], f["x1"]]
+    y = [f["y0"], f["y1"]]
+    pl.plot(x, y, "r-")
 xlim = pl.gca().get_xlim()
 ylim = pl.gca().get_ylim()
 
@@ -42,12 +43,11 @@ ylim = pl.gca().get_ylim()
 for ix in range(-1, 2):
     for iy in range(-1, 2):
         if not ix == 0 or not iy == 0:
-            for ci in range(len(cs)):
-                c = cs[ci]
-                it = [c["v0"], c["v1"]]
-                pl.plot(
-                    vs[it]["x"] + ix * 2.0, vs[it]["y"] + iy * 2., "b-"
-                )
+            for fi in range(len(fs)):
+                f = fs[fi]
+                x = np.array([f["x0"], f["x1"]]) + 2. * ix
+                y = np.array([f["y0"], f["y1"]]) + 2. * iy
+                pl.plot(x, y, "b-")
 
 pl.plot(gs["x"], gs["y"], "g.")
 # pl.plot(ms["x"], ms["y"], "y.")

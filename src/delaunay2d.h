@@ -107,6 +107,11 @@ struct delaunay {
    *  within the vertex array. */
   int vertex_end;
 
+  /*! @brief Offset of the ghost vertices. This will be set by
+   * delaunay_consolidate() and is used in the construction of the voronoi
+   * grid. */
+  int ghost_offset;
+
   /*! @brief Triangles that make up the tessellation. */
   struct triangle* triangles;
 
@@ -296,6 +301,7 @@ inline static void delaunay_init(struct delaunay* restrict d,
    * end)*/
   d->vertex_start = 0;
   d->vertex_end = vertex_size;
+  d->ghost_offset = 0;
   /* we add the dummy vertices behind the local vertices and before the ghost
    * vertices (see below) */
   d->vertex_index = vertex_size;
@@ -1287,6 +1293,9 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
  * @param d Delaunay tessellation.
  */
 inline static void delaunay_consolidate(struct delaunay* restrict d) {
+  /* Set ghost offset. Any vertices added from this point onward will be
+   * considered ghost vertices. */
+  d->ghost_offset = d->vertex_index;
   /* perform a consistency test if enabled */
   delaunay_check_tessellation(d);
 }

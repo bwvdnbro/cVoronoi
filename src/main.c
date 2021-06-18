@@ -127,12 +127,12 @@ static inline void update_paths(int loop, double *vertices) {
 int main() {
   /* seed the random generator with the most random seed ever */
   srand(42);
-  int count[3] = {5, 5, 5};
-  double dim[3] = {1., 1., 1.};
+  int count[3] = {5, 5, 1};
+  double dim[3] = {2., 2., 2.};
   struct cell c;
-  cell_init(&c, count, 0.1, dim);
+  cell_init(&c, count, 0.5, dim);
   cell_construct_local_delaunay(&c);
-//  cell_make_delaunay_periodic(&c);
+  cell_make_delaunay_periodic(&c);
   cell_construct_voronoi(&c);
 
   /* Now print the Voronoi grid for visual inspection. */
