@@ -397,9 +397,9 @@ inline static void delaunay_init_vertex(struct delaunay* restrict d,
 
 #ifdef DELAUNAY_NONEXACT
   /* store a copy of the rescaled coordinates to apply non-exact tests */
-  d->rescaled_vertices[3 * d->vertex_index] = rescaled_x;
-  d->rescaled_vertices[3 * d->vertex_index + 1] = rescaled_y;
-  d->rescaled_vertices[3 * d->vertex_index + 2] = rescaled_z;
+  d->rescaled_vertices[3 * v] = rescaled_x;
+  d->rescaled_vertices[3 * v + 1] = rescaled_y;
+  d->rescaled_vertices[3 * v + 2] = rescaled_z;
 #endif
 
   /* convert the rescaled coordinates to integer coordinates and store these */
