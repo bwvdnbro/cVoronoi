@@ -316,9 +316,13 @@ inline static void delaunay_destroy(struct delaunay* restrict d) {
   free(d->rescaled_vertices);
 #endif
   free(d->integer_vertices);
+  free(d->vertex_tetrahedron_links);
+  free(d->vertex_tetrahedron_index);
   free(d->search_radii);
   free(d->tetrahedra);
   free(d->tetrahedron_queue);
+  free(d->free_indices_queue);
+  free(d->tetrahedra_containing_vertex);
   geometry3d_destroy(&d->geometry);
 }
 

@@ -316,18 +316,90 @@ inline static double geometry3d_compute_area_triangle(double ax, double ay,
                                                       double by, double bz,
                                                       double cx, double cy,
                                                       double cz) {
-  double abx = bx - ax;
-  double aby = by - ay;
-  double abz = bz - az;
-  double acx = cx - ax;
-  double acy = cy - ay;
-  double acz = cz - az;
+  const double abx = bx - ax;
+  const double aby = by - ay;
+  const double abz = bz - az;
+  const double acx = cx - ax;
+  const double acy = cy - ay;
+  const double acz = cz - az;
 
-  double Dx = aby * acz - abz * acy;
-  double Dy = abz * acx - abx * acz;
-  double Dz = abx * acy - aby * acx;
+  const double Dx = aby * acz - abz * acy;
+  const double Dy = abz * acx - abx * acz;
+  const double Dz = abx * acy - aby * acx;
 
-  return sqrt(Dx * Dx + Dy * Dy + Dz * Dz) /  2.;
+  return sqrt(Dx * Dx + Dy * Dy + Dz * Dz) / 2.;
+}
+
+inline static void geometry3d_compute_centroid_triangle(
+    double ax, double ay, double az, double bx, double by, double bz, double cx,
+    double cy, double cz, double* result) {
+  result[0] = (ax + bx + cx) / 3.;
+  result[1] = (ay + by + cy) / 3.;
+  result[2] = (az + bz + cz) / 3.;
+}
+
+inline static double geometry3d_compute_volume_tetrahedron(
+    double ax, double ay, double az, double bx, double by, double bz, double cx,
+    double cy, double cz, double dx, double dy, double dz) {
+  /* Compute relative coordinates */
+  const double dax = ax - dx;
+  const double day = ay - dy;
+  const double daz = az - dz;
+  const double dbx = bx - dx;
+  const double dby = by - dy;
+  const double dbz = bz - dz;
+  const double dcx = cx - dx;
+  const double dcy = cy - dy;
+  const double dcz = cz - dz;
+
+  /* compute (b - d) x (c - d) */
+  const double cross_x = dby * dcz - dcy * dbz;
+  const double cross_y = dbx * dcz - dcx * dbz;
+  const double cross_z = dbx * dcy - dcx * dby;
+
+  return fabs(dax * cross_x + day * cross_y + daz * cross_z) / 6.;
+}
+
+inline static void geometry3d_compute_centroid_tetrahedron(
+    double ax, double ay, double az, double bx, double by, double bz, double cx,
+    double cy, double cz, double dx, double dy, double dz, double* result) {
+  result[0] = (ax + bx + cx + dx) / 4.;
+  result[1] = (ay + by + cy + dy) / 4.;
+  result[2] = (az + bz + cz + dz) / 4.;
+}
+
+inline static double geometry3d_compute_centroid_volume_tetrahedron(
+    double ax, double ay, double az, double bx, double by, double bz, double cx,
+    double cy, double cz, double dx, double dy, double dz, double* result) {
+  geometry3d_compute_centroid_tetrahedron(ax, ay, az, bx, by, bz, cx, cy, cz,
+                                          dx, dy, dz, result);
+  return geometry3d_compute_volume_tetrahedron(ax, ay, az, bx, by, bz, cx, cy,
+                                               cz, dx, dy, dz);
+}
+
+inline static double geometry3d_compute_centroid_area(
+    const double* restrict points, int n_points, double* result) {
+  result[0] = 0.;
+  result[1] = 0.;
+  result[2] = 0.;
+  for (int i = 0; i < n_points; i++) {
+    result[0] += points[3 * i];
+    result[1] += points[3 * i + 1];
+    result[2] += points[3 * i + 2];
+  }
+
+  if (n_points < 2) return 0.;
+
+  double V = 0.;
+  const double v0x = points[0];
+  const double v0y = points[1];
+  const double v0z = points[2];
+  for (int i = 2; i < n_points; i++) {
+    V += geometry3d_compute_area_triangle(
+        v0x, v0y, v0z, points[3 * i - 3], points[3 * i - 2], points[3 * i - 1],
+        points[3 * i], points[3 * i + 1], points[3 * i + 2]);
+  }
+  return V;
 }
 
 #endif  // CVORONOI_GEOMETRY3D_H
