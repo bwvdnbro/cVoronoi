@@ -126,7 +126,7 @@ static inline void update_paths(int loop, double *vertices) {
 int main() {
   /* seed the random generator with the most random seed ever */
   srand(42);
-  int count[3] = {2, 2, 2};
+  int count[3] = {3, 3, 3};
   double dim[3] = {1., 1., 1.};
   struct cell c;
   cell_init(&c, count, 0.75, dim);
@@ -142,7 +142,7 @@ int main() {
   cell_print_tesselations(&c, vor_filename, del_filename);
 
   /* Lloyd's relaxation */
-  for (int loop = 1; loop <= 10; ++loop) {
+  for (int loop = 1; loop <= 20; ++loop) {
     printf("Relaxation loop %i\n", loop);
     cell_lloyd_relax_vertices(&c);
     sprintf(vor_filename, "vtest%03i.txt", loop);
