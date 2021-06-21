@@ -14,16 +14,20 @@
 
 -[X] Refactor voronoi2d code to match current version in swift
 -[X] Construction
+-[ ] Documentation
 -[ ] Check with CmacIonize
 -[ ] Better visualisation
 
 #### Construction:
+
 Correspondences:
+
 - With every vertex of the delaunay tesselation corresponds a voronoi cell.
 - With every edge of the delaunay tesselation corresponds a voronoi face.
 - With every tetrahedron of the delaunay tesselation corresponds a voronoi vertex.
 
 Algorithm:
+
 1. Calculate the centroid of each tetrahedron of the Delaunay tesselation and store those centroids in a temporary
    array.
 2. For each non-dummy, non-ghost generator:

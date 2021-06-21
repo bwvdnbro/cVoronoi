@@ -547,7 +547,7 @@ inline static void voronoi_check_grid(struct voronoi *restrict v) {
   for (int i = 0; i < v->number_of_cells; i++) {
     total_volume += v->cells[i].volume;
   }
-  fprintf(stderr, "Total volume: %g", total_volume);
+  fprintf(stderr, "Total volume: %g\n", total_volume);
 }
 
 inline static void voronoi_print_grid(const struct voronoi *v,
