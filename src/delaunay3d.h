@@ -91,7 +91,7 @@ struct delaunay {
   int vertex_index;
 
   /*! @brief Current size of the vertex array in memory. If vertex_size matches
-   *  vertex_index, the memory buffer is full and needs to be expanded. */
+   *  n_vertices, the memory buffer is full and needs to be expanded. */
   int vertex_size;
 
   /*! @brief Begin index of the normal vertex_indices. This skips the 3 auxiliary
@@ -466,7 +466,7 @@ inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
   delaunay_init_vertex(d, d->vertex_index, x, y, z);
 
   /* return the vertex index and then increase it by 1.
-     After this operation, vertex_index will correspond to the size of the
+     After this operation, n_vertices will correspond to the size of the
      vertex arrays and is also the index of the next vertex that will be
      created. */
   return d->vertex_index++;

@@ -309,7 +309,7 @@ static inline void voronoi_init(struct voronoi *restrict v,
       t1 = d->triangles[t1].neighbours[next_t_ix_in_cur_t];
     } /* loop around the voronoi cell generator */
 
-    /* don't forget the last edge for the geometry2d! */
+    /* don't forget the last edge for the geometry! */
     double bx = cx;
     double by = cy;
     cx = vertices[2 * first_vor_vert_ix];

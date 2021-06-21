@@ -34,12 +34,8 @@ struct voronoi_pair {
   /*! Vertices of the interface. */
   double *vertices;
 
-  /*! Index to put the next vertex at. This is also the size of the
-   * vertex_indices array. */
-  int vertex_index;
-
-  /*! current allocated size for the vertex_indices */
-  int vertex_size;
+  /*! Number of vertices of this face. */
+  int n_vertices;
 #endif
 };
 
@@ -57,6 +53,7 @@ inline static void voronoi_pair_init(struct voronoi_pair *pair,
 
 #ifdef VORONOI_STORE_CONNECTIONS
   pair->vertices = (double *)malloc(3 * n_vertices * sizeof(double));
+  pair->n_vertices = n_vertices;
   for (int i = 0; i < n_vertices; i++) {
     pair->vertices[3 * i] = vertices[3 * i];
     pair->vertices[3 * i + 1] = vertices[3 * i + 1];
@@ -555,7 +552,39 @@ inline static void voronoi_check_grid(struct voronoi *restrict v) {
 
 inline static void voronoi_print_grid(const struct voronoi *v,
                                       const char *filename) {
-  // TODO
+  FILE *file = fopen(filename, "w");
+
+  /* first write the cells (and generators, if those are stored) */
+  for (int i = 0; i < v->number_of_cells; ++i) {
+    struct voronoi_cell *this_cell = &v->cells[i];
+#ifdef VORONOI_STORE_GENERATORS
+    fprintf(file, "G\t%g\t%g\t%g\n", this_cell->generator[0],
+            this_cell->generator[1], this_cell->generator[2]);
+#endif
+    fprintf(file, "C\t%g\t%g\t%g\t%g", this_cell->centroid[0],
+            this_cell->centroid[1], this_cell->centroid[2], this_cell->volume);
+#ifdef VORONOI_STORE_CELL_STATS
+    fprintf(file, "\t%i", this_cell->nface);
+#endif
+    fprintf(file, "\n");
+  }
+
+  /* now write the faces */
+  for (int ngb = 0; ngb < 2; ++ngb) {
+    for (int i = 0; i < v->pair_index[ngb]; ++i) {
+      struct voronoi_pair *pair = &v->pairs[ngb][i];
+      fprintf(file, "F\t%i\t%g\t%g\t%g", ngb, pair->surface_area,
+              pair->midpoint[0], pair->midpoint[1]);
+#ifdef VORONOI_STORE_CONNECTIONS
+      for (int j = 0; j < pair->n_vertices; j++) {
+        fprintf(file, "\t(%g, %g, %g)", pair->vertices[3 * j], pair->vertices[3 * j + 1], pair->vertices[3 * j + 2]);
+      }
+#endif
+      fprintf(file, "\n");
+    }
+  }
+
+  fclose(file);
 }
 
 inline static int double_cmp(double double1, double double2,
