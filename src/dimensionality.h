@@ -5,8 +5,8 @@
 #ifndef CVORONOI_DIMENSIONALITY_H
 
 /* Define dimensionality of code */
-#define DIMENSIONALITY_2D
-//#define DIMENSIONALITY_3D
+//#define DIMENSIONALITY_2D
+#define DIMENSIONALITY_3D
 
 #if !defined(DIMENSIONALITY_2D) && !defined(DIMENSIONALITY_3D)
 #error "Invalid or undefined dimensionality"

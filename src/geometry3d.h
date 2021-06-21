@@ -6,6 +6,7 @@
 #define CVORONOI_GEOMETRY3D_H
 
 #include <gmp.h>
+#include <math.h>
 
 /**
  * @brief Auxiliary variables used by the arbirary exact tests. Since allocating
@@ -66,8 +67,8 @@ inline static double geometry3d_orient() {
  * points as vertex_indices.
  *
  * The test returns a positive result if the fourth vertex is below the plane
- * through the three other vertex_indices, with above the direction from which the
- * three points are ordered counterclockwise.
+ * through the three other vertex_indices, with above the direction from which
+ * the three points are ordered counterclockwise.
  *
  * E.g. if the four points are (0, 0, 0), (0, 0, 1), (0, 1, 0), and (1, 0, 0),
  * then this function returns 1.
@@ -144,8 +145,9 @@ inline static double geometry3d_in_sphere() {
  * @brief Check if the fifth given point is inside (-1) the circumsphere of the
  * tetrahedron formed by the other four given points.
  *
- * It is assumed that the first four points are the vertex_indices of a positively
- * oriented tetrahedron, as defined by a negative return value of orient3d().
+ * It is assumed that the first four points are the vertex_indices of a
+ * positively oriented tetrahedron, as defined by a negative return value of
+ * orient3d().
  *
  * If the fifth point is exactly on the circumsphere of the tetrahedron, this
  * functions returns 0.
@@ -307,6 +309,25 @@ static inline void geometry3d_compute_circumcenter(
   circumcenter[0] = Dx / denominator + v0x;
   circumcenter[1] = Dy / denominator + v0y;
   circumcenter[2] = Dz / denominator + v0z;
+}
+
+inline static double geometry3d_compute_area_triangle(double ax, double ay,
+                                                      double az, double bx,
+                                                      double by, double bz,
+                                                      double cx, double cy,
+                                                      double cz) {
+  double abx = bx - ax;
+  double aby = by - ay;
+  double abz = bz - az;
+  double acx = cx - ax;
+  double acy = cy - ay;
+  double acz = cz - az;
+
+  double Dx = aby * acz - abz * acy;
+  double Dy = abz * acx - abx * acz;
+  double Dz = abx * acy - aby * acx;
+
+  return sqrt(Dx * Dx + Dy * Dy + Dz * Dz) /  2.;
 }
 
 #endif  // CVORONOI_GEOMETRY3D_H

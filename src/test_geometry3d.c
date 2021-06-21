@@ -14,6 +14,25 @@ inline static void test_circumcenter(){
   }
 }
 
+inline static void test_area(){
+  double area = geometry3d_compute_area_triangle(0, 0, 0, 1, 0, 0, 0, 0, 1);
+  if (area != 0.5) {
+    abort();
+  }
+  area = geometry3d_compute_area_triangle(0, 0, 0, 0, 1, 0, 0, 0, 1);
+  if (area != 0.5) {
+    abort();
+  }
+  area = geometry3d_compute_area_triangle(0, 0, 0, 1, 0, 0, 0, 1, 0);
+  if (area != 0.5) {
+    abort();
+  }
+  area = geometry3d_compute_area_triangle(1, 0, 0, 0, 1, 0, 0, 0, 1);
+  if (area != sqrt(3.)/2.) {
+    abort();
+  }
+}
+
 /**
  * @brief Test for functions of geometry3d.h
  *
@@ -22,4 +41,5 @@ inline static void test_circumcenter(){
  */
 int main(int argc, char **argv) {
   test_circumcenter();
+  test_area();
 }
