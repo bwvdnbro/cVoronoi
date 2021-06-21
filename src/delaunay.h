@@ -11,7 +11,7 @@
 #include "geometry.h"
 
 /*! @brief Activate extensive log output. */
-//#define DELAUNAY_LOG_OUTPUT
+#define DELAUNAY_LOG_OUTPUT
 /*! @brief Activate runtime assertions. */
 #define DELAUNAY_DO_ASSERTIONS
 /*! @brief Use and output non-exact floating point geometrical tests as well as

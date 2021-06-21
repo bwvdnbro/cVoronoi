@@ -29,7 +29,7 @@
 #define SWIFT_GEOMETRY_H
 
 #include <gmp.h>
-
+#include <math.h>
 /**
  * @brief Auxiliary variables used by the arbirary exact tests. Since allocating
  * and deallocating these variables poses a significant overhead, they are best

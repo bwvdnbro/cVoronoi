@@ -45,7 +45,7 @@ def main(fname):
     print(vs.shape, ts.shape)
 
     # filter dummy vertices
-    ts = ts[np.all((ts < 1) | (ts > 4), axis=1), :]
+    ts = ts[np.all((ts < 2) | (ts > 6), axis=1), :]
     plot(vs, ts)
 
 

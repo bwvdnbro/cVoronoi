@@ -8,6 +8,8 @@
 #include "geometry.h"
 #include "hydro_space.h"
 #include "tetrahedron.h"
+#include <math.h>
+#include <float.h>
 
 /* Forward declarations */
 struct delaunay;

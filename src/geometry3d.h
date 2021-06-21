@@ -357,7 +357,7 @@ inline static double geometry3d_compute_volume_tetrahedron(
   const double cross_y = dbx * dcz - dcx * dbz;
   const double cross_z = dbx * dcy - dcx * dby;
 
-  return fabs(dax * cross_x + day * cross_y + daz * cross_z) / 6.;
+  return fabs(dax * cross_x - day * cross_y + daz * cross_z) / 6.;
 }
 
 inline static void geometry3d_compute_centroid_tetrahedron(
