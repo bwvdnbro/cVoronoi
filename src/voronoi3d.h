@@ -313,8 +313,10 @@ inline static void voronoi_init(struct voronoi *restrict v,
 
     /* Create a new voronoi cell for this generator */
     struct voronoi_cell *this_cell = &v->cells[gen_idx_in_d];
-    double cell_volume = 0.;
-    double cell_centroid[3] = {0., 0., 0.};
+    this_cell->volume = 0.;
+    this_cell->centroid[0] = 0.;
+    this_cell->centroid[1] = 0.;
+    this_cell->centroid[2] = 0.;
     int nface = 0;
 
     /* get the generator position, we use it during centroid/volume
@@ -433,10 +435,10 @@ inline static void voronoi_init(struct voronoi *restrict v,
         face->midpoint[2] += 0.;
 
         // TODO update cell volume and centroid
-        cell_volume += 0.;
-        cell_centroid[0] += 0.;
-        cell_centroid[1] += 0.;
-        cell_centroid[2] += 0.;
+        this_cell->volume += 0.;
+        this_cell->centroid[0] += 0.;
+        this_cell->centroid[1] += 0.;
+        this_cell->centroid[2] += 0.;
 
         /* Update variables */
         prev_t_idx_in_cur_t = cur_t->index_in_neighbour[next_t_idx_in_cur_t];
@@ -457,12 +459,9 @@ inline static void voronoi_init(struct voronoi *restrict v,
         }
       }
     }
-    cell_centroid[0] /= cell_volume;
-    cell_centroid[1] /= cell_volume;
-    cell_centroid[2] /= cell_volume;
-    this_cell->volume = cell_volume;
-    this_cell->centroid[0] = cell_centroid[0];
-    this_cell->centroid[1] = cell_centroid[1];
+    this_cell->centroid[0] /= this_cell->volume;
+    this_cell->centroid[1] /= this_cell->volume;
+    this_cell->centroid[2] /= this_cell->volume;
 #ifdef VORONOI_STORE_CELL_STATS
     this_cell->nface = nface;
 #endif
