@@ -43,18 +43,25 @@ struct voronoi_pair {
 #endif
 };
 
-inline static void voronoi_pair_init(struct voronoi_pair *pair) {
-  pair->left = -1;
-  pair->right = -1;
-  pair->right_cell = NULL;
-  pair->surface_area = 0;
-  for (int i = 0; i < 3; i++) {
-    pair->midpoint[i] = 0.;
-  }
+inline static void voronoi_pair_init(struct voronoi_pair *pair,
+                                     struct cell *restrict c,
+                                     int left_part_pointer,
+                                     int right_part_pointer, double *vertices,
+                                     int n_vertices) {
+  pair->right_cell = c;
+  pair->left = left_part_pointer;
+  pair->right = right_part_pointer;
+
+  pair->surface_area =
+      geometry3d_compute_centroid_area(vertices, n_vertices, pair->midpoint);
+
 #ifdef VORONOI_STORE_CONNECTIONS
-  pair->vertices = (double *)malloc(6 * sizeof(double));
-  pair->vertex_index = 0;
-  pair->vertex_size = 3;
+  pair->vertices = (double *)malloc(3 * n_vertices * sizeof(double));
+  for (int i = 0; i < n_vertices; i++) {
+    pair->vertices[3 * i] = vertices[3 * i];
+    pair->vertices[3 * i + 1] = vertices[3 * i + 1];
+    pair->vertices[3 * i + 2] = vertices[3 * i + 2];
+  }
 #endif
 }
 
@@ -184,7 +191,9 @@ inline static int double_cmp(double double1, double double2,
 inline static int voronoi_new_face(struct voronoi *v, int sid,
                                    struct cell *restrict c,
                                    int left_part_pointer,
-                                   int right_part_pointer);
+                                   int right_part_pointer, double *vertices,
+                                   int n_vertices);
+inline static void voronoi_check_grid(struct voronoi *restrict v);
 
 inline static void voronoi_init(struct voronoi *restrict v,
                                 struct delaunay *restrict d) {
@@ -207,10 +216,14 @@ inline static void voronoi_init(struct voronoi *restrict v,
      generators) */
   for (int i = 0; i < d->tetrahedron_index - 4; i++) {
     struct tetrahedron *t = &d->tetrahedra[i + 4];
+    /* Skip inactive (deleted, but not yet replaced) tetrahedra */
+    if (!t->active) continue;
+
     int v0 = t->vertices[0];
     int v1 = t->vertices[1];
     int v2 = t->vertices[2];
     int v3 = t->vertices[3];
+    voronoi_assert(v0 >= 0 && v1 >= 0 && v2 >= 0 && v3 >= 0);
 
     /* if the triangle is not linked to a non-ghost, non-dummy vertex, it is not
      * a grid vertex and we can skip it. */
@@ -301,6 +314,13 @@ inline static void voronoi_init(struct voronoi *restrict v,
   struct tetrahedron_vertex_queue queue;
   tetrahedron_vertex_queue_init(&queue);
 
+  /* The size of the array used to temporarily store the vertices of the voronoi
+   * faces in */
+  int face_vertices_size = 10;
+  /* Temporary array to store face vertices in */
+  double *face_vertices =
+      (double *)malloc(3 * face_vertices_size * sizeof(double));
+
   /* loop over all cell generators, and hence over all non-ghost, non-dummy
      Delaunay vertex_indices */
   for (int gen_idx_in_d = 0; gen_idx_in_d < v->number_of_cells;
@@ -312,7 +332,7 @@ inline static void voronoi_init(struct voronoi *restrict v,
     neighbour_flags[gen_idx_in_d] = 1;
 
     /* Create a new voronoi cell for this generator */
-    struct voronoi_cell *this_cell = &v->cells[gen_idx_in_d];
+    struct voronoi_cell *this_cell = &v->cells[gen_idx_in_d - d->vertex_start];
     this_cell->volume = 0.;
     this_cell->centroid[0] = 0.;
     this_cell->centroid[1] = 0.;
@@ -347,28 +367,17 @@ inline static void voronoi_init(struct voronoi *restrict v,
     neighbour_flags[other_v_idx_in_d] = 1;
 
     while (!tetrahedron_vertex_queue_is_empty(&queue)) {
+      /* with each delaunay edge corresponds a voronoi face */
+      nface++;
+
       /* Pop the next axis vertex and corresponding tetrahedron from the queue
        */
       int first_t_idx, axis_idx_in_d, axis_idx_in_t;
       tetrahedron_vertex_queue_pop(&queue, &first_t_idx, &axis_idx_in_d,
                                    &axis_idx_in_t);
+      voronoi_assert(axis_idx_in_d >= 0 && (axis_idx_in_d < d->vertex_end ||
+                                            axis_idx_in_d >= d->ghost_offset));
       struct tetrahedron *first_t = &d->tetrahedra[first_t_idx];
-
-      /* Initialize a new voronoi-face */
-      struct voronoi_pair *face;
-      if (axis_idx_in_d < d->vertex_end) {
-        face = &v->pairs[0][voronoi_new_face(v, 0, NULL, gen_idx_in_d,
-                                             axis_idx_in_d)];
-      } else if (axis_idx_in_d >= d->ghost_offset) {
-        face = &v->pairs[1][voronoi_new_face(v, 1, NULL, gen_idx_in_d,
-                                             axis_idx_in_d)];
-      } else {
-        fprintf(stderr,
-                "Found dummy vertex! this can mean that the neighbouring cell "
-                "was empty.");
-        abort();
-      }
-      nface++;
 
       /* Get a non axis vertex from first_t */
       int non_axis_idx_in_first_t = (axis_idx_in_t + 1) % 4;
@@ -407,38 +416,52 @@ inline static void voronoi_init(struct voronoi *restrict v,
         neighbour_flags[next_non_axis_idx_in_d] |= 1;
       }
 
-      /* Get the coordinates of the voronoi vertex corresponding to first_t */
+      /* Get the coordinates of the voronoi vertex of the new face */
       int vor_vertex0_idx = first_t_idx - 4;
-      double vv0x = voronoi_vertices[3 * vor_vertex0_idx];
-      double vv0y = voronoi_vertices[3 * vor_vertex0_idx + 1];
-      double vv0z = voronoi_vertices[3 * vor_vertex0_idx + 2];
+      face_vertices[0] = voronoi_vertices[3 * vor_vertex0_idx];
+      face_vertices[1] = voronoi_vertices[3 * vor_vertex0_idx + 1];
+      face_vertices[2] = voronoi_vertices[3 * vor_vertex0_idx + 2];
+      int face_vertices_index = 3;
 
       /* Loop around the axis */
       while (next_t_idx != first_t_idx) {
-
         /* Get the coordinates of the voronoi vertex corresponding to cur_t and
          * next_t */
-        int vor_vertex1_idx = cur_t_idx - 4;
-        double vv1x = voronoi_vertices[3 * vor_vertex1_idx];
-        double vv1y = voronoi_vertices[3 * vor_vertex1_idx + 1];
-        double vv1z = voronoi_vertices[3 * vor_vertex1_idx + 2];
-        int vor_vertex2_idx = next_t_idx - 4;
-        double vv2x = voronoi_vertices[3 * vor_vertex2_idx];
-        double vv2y = voronoi_vertices[3 * vor_vertex2_idx + 1];
-        double vv2z = voronoi_vertices[3 * vor_vertex2_idx + 2];
+        if (face_vertices_index + 6 > face_vertices_size) {
+          face_vertices_size <<= 1;
+          face_vertices = (double *)realloc(
+              face_vertices, 3 * face_vertices_size * sizeof(double));
+        }
+        const int vor_vertex1_idx = cur_t_idx - 4;
+        face_vertices[face_vertices_index] =
+            voronoi_vertices[3 * vor_vertex1_idx];
+        face_vertices[face_vertices_index + 1] =
+            voronoi_vertices[3 * vor_vertex1_idx + 1];
+        face_vertices[face_vertices_index + 2] =
+            voronoi_vertices[3 * vor_vertex1_idx + 2];
+        const int vor_vertex2_idx = next_t_idx - 4;
+        face_vertices[face_vertices_index + 3] =
+            voronoi_vertices[3 * vor_vertex2_idx];
+        face_vertices[face_vertices_index + 4] =
+            voronoi_vertices[3 * vor_vertex2_idx + 1];
+        face_vertices[face_vertices_index + 5] =
+            voronoi_vertices[3 * vor_vertex2_idx + 2];
+        face_vertices_index += 6;
 
-        // TODO compute centroid and area of triangle vv0 vv1 vv2 and add those
-        // to the voronoi face we are constructing here.
-        face->surface_area += 0.;
-        face->midpoint[0] += 0.;
-        face->midpoint[1] += 0.;
-        face->midpoint[2] += 0.;
-
-        // TODO update cell volume and centroid
-        this_cell->volume += 0.;
-        this_cell->centroid[0] += 0.;
-        this_cell->centroid[1] += 0.;
-        this_cell->centroid[2] += 0.;
+        /* Update cell volume and triangle_centroid */
+        double tetrahedron_centroid[3];
+        const double V = geometry3d_compute_centroid_volume_tetrahedron(
+            ax, ay, az, face_vertices[0], face_vertices[1], face_vertices[2],
+            face_vertices[face_vertices_index - 6],
+            face_vertices[face_vertices_index - 5],
+            face_vertices[face_vertices_index - 4],
+            face_vertices[face_vertices_index - 3],
+            face_vertices[face_vertices_index - 2],
+            face_vertices[face_vertices_index - 1], tetrahedron_centroid);
+        this_cell->volume += V;
+        this_cell->centroid[0] += V * tetrahedron_centroid[0];
+        this_cell->centroid[1] += V * tetrahedron_centroid[1];
+        this_cell->centroid[2] += V * tetrahedron_centroid[2];
 
         /* Update variables */
         prev_t_idx_in_cur_t = cur_t->index_in_neighbour[next_t_idx_in_cur_t];
@@ -458,6 +481,16 @@ inline static void voronoi_init(struct voronoi *restrict v,
           neighbour_flags[next_non_axis_idx_in_d] |= 1;
         }
       }
+      if (axis_idx_in_d < d->vertex_end) {
+        /* Store faces only once */
+        if (gen_idx_in_d < axis_idx_in_d) {
+          voronoi_new_face(v, 0, NULL, gen_idx_in_d, axis_idx_in_d,
+                           face_vertices, face_vertices_index);
+        }
+      } else { /* axis_idx_in_d >= d->ghost_offset */
+        voronoi_new_face(v, 1, NULL, gen_idx_in_d, axis_idx_in_d, face_vertices,
+                         face_vertices_index);
+      }
     }
     this_cell->centroid[0] /= this_cell->volume;
     this_cell->centroid[1] /= this_cell->volume;
@@ -468,7 +501,8 @@ inline static void voronoi_init(struct voronoi *restrict v,
     /* reset flags for all neighbours of this cell */
     neighbour_flags[gen_idx_in_d] = 0;
     for (int i = 0; i < queue.index_end; i++) {
-      neighbour_flags[queue.vertex_indices[i]] = 0;
+      voronoi_assert(queue.vertex_indices[i] < d->vertex_index)
+          neighbour_flags[queue.vertex_indices[i]] = 0;
     }
 #ifdef VORONOI_CHECKS
     for (int i = 0; i < d->vertex_index; i++) {
@@ -478,29 +512,25 @@ inline static void voronoi_init(struct voronoi *restrict v,
   }
   free(voronoi_vertices);
   free(neighbour_flags);
+  free(face_vertices);
   tetrahedron_vertex_queue_destroy(&queue);
+  voronoi_check_grid(v);
 }
 
 inline static int voronoi_new_face(struct voronoi *v, int sid,
                                    struct cell *restrict c,
                                    int left_part_pointer,
-                                   int right_part_pointer) {
+                                   int right_part_pointer, double *vertices,
+                                   int n_vertices) {
   if (v->pair_index[sid] == v->pair_size[sid]) {
     v->pair_size[sid] <<= 1;
     v->pairs[sid] = (struct voronoi_pair *)realloc(
         v->pairs[sid], v->pair_size[sid] * sizeof(struct voronoi_pair));
   }
+  /* Initialize pair */
   struct voronoi_pair *this_pair = &v->pairs[sid][v->pair_index[sid]];
-  this_pair->right_cell = c;
-  this_pair->left = left_part_pointer;
-  this_pair->right = right_part_pointer;
-  this_pair->surface_area = 0.;
-  this_pair->midpoint[0] = 0.;
-  this_pair->midpoint[1] = 0.;
-  this_pair->midpoint[2] = 0.;
-#ifdef VORONOI_STORE_CONNECTIONS
-  // TODO
-#endif
+  voronoi_pair_init(this_pair, c, left_part_pointer, right_part_pointer,
+                    vertices, n_vertices);
   /* return and then increase */
   return v->pair_index[sid]++;
 }
@@ -508,8 +538,19 @@ inline static int voronoi_new_face(struct voronoi *v, int sid,
 inline static void voronoi_destroy(struct voronoi *restrict v) {
   free(v->cells);
   for (int i = 0; i < 2; ++i) {
+    for (int j = 0; j < v->pair_index[i]; j ++) {
+      voronoi_pair_destroy(&v->pairs[i][j]);
+    }
     free(v->pairs[i]);
   }
+}
+
+inline static void voronoi_check_grid(struct voronoi *restrict v) {
+  double total_volume = 0.;
+  for (int i = 0; i < v->number_of_cells; i++) {
+    total_volume += v->cells[i].volume;
+  }
+  fprintf(stderr, "Total volume: %g", total_volume);
 }
 
 inline static void voronoi_print_grid(const struct voronoi *v,

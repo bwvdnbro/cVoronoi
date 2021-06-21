@@ -33,6 +33,13 @@ inline static void test_area(){
   }
 }
 
+inline static void test_volume() {
+  double V = geometry3d_compute_volume_tetrahedron(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1);
+  if (V != 1. / 6.) {
+    abort();
+  }
+}
+
 /**
  * @brief Test for functions of geometry3d.h
  *
@@ -42,4 +49,5 @@ inline static void test_area(){
 int main(int argc, char **argv) {
   test_circumcenter();
   test_area();
+  test_volume();
 }
