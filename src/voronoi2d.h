@@ -31,73 +31,6 @@
 #include <string.h>
 
 /**
- * @brief Compute the coordinates of the circumcenter of the triangle
- * (v0, v1, v2).
- *
- * @param v0x, v0y, v1x, v1y, v2x, v2y Coordinates of the corners of the
- * triangle.
- * @param circumcenter (Returned)
- */
-static inline void voronoi_compute_circumcenter(double v0x, double v0y,
-                                                double v1x, double v1y,
-                                                double v2x, double v2y,
-                                                double *circumcenter) {
-  double ax = v1x - v0x;
-  double ay = v1y - v0y;
-  double bx = v2x - v0x;
-  double by = v2y - v0y;
-
-  double D = 2. * (ax * by - ay * bx);
-  double a2 = ax * ax + ay * ay;
-  double b2 = bx * bx + by * by;
-  circumcenter[0] = v0x + (by * a2 - ay * b2) / D;
-  circumcenter[1] = v0y + (ax * b2 - bx * a2) / D;
-}
-
-/**
- * @brief Compute the volume and centroid of the triangle through the given 3
- * points.
- *
- * @param ax, ay, bx, by, cx, cy Point coordinates.
- * @param result Centroid of the triangle.
- * @return Volume of the triangle.
- */
-static inline double voronoi_compute_centroid_volume_triangle(
-    double ax, double ay, double bx, double by, double cx, double cy,
-    double *result) {
-  result[0] = (ax + bx + cx) / 3.;
-  result[1] = (ay + by + cy) / 3.;
-
-  double s10x = bx - ax;
-  double s10y = by - ay;
-
-  double s20x = cx - ax;
-  double s20y = cy - ay;
-
-  return 0.5 * fabs(s10x * s20y - s20x * s10y);
-}
-
-/**
- * @brief Compute the midpoint and surface area of the face with the given
- * vertex_indices.
- *
- * @param ax, ay, bx, by Face vertex_indices.
- * @param result Midpoint of the face.
- * @return Surface area of the face.
- */
-static inline double voronoi_compute_midpoint_area_face(double ax, double ay,
-                                                        double bx, double by,
-                                                        double *result) {
-  result[0] = 0.5 * (ax + bx);
-  result[1] = 0.5 * (ay + by);
-
-  double sx = bx - ax;
-  double sy = by - ay;
-
-  return sqrt(sx * sx + sy * sy);
-}
-
-/**
  * @brief Voronoi interface.
  *
  * An interface is a connection between two neighbouring Voronoi cells. It is
@@ -273,8 +206,7 @@ static inline void voronoi_init(struct voronoi *restrict v,
           "one of the neighbouring cells is empty.");
     }
 
-    voronoi_compute_circumcenter(v0x, v0y, v1x, v1y, v2x, v2y,
-                                 &vertices[2 * i]);
+    geometry2d_compute_circumcenter(v0x, v0y, v1x, v1y, v2x, v2y, &vertices[2 * i]);
   } /* loop over the Delaunay triangles and compute the circumcenters */
 
   /* Allocate memory for the voronoi pairs. */
@@ -347,8 +279,8 @@ static inline void voronoi_init(struct voronoi *restrict v,
       cx = vertices[2 * vor_vert_ix];
       cy = vertices[2 * vor_vert_ix + 1];
 
-      double V = voronoi_compute_centroid_volume_triangle(ax, ay, bx, by, cx,
-                                                          cy, centroid);
+      double V = geometry2d_compute_centroid_volume_triangle(ax, ay, bx, by, cx,
+                                                             cy, centroid);
       cell_volume += V;
       cell_centroid[0] += V * centroid[0];
       cell_centroid[1] += V * centroid[1];
@@ -383,8 +315,8 @@ static inline void voronoi_init(struct voronoi *restrict v,
     cx = vertices[2 * first_vor_vert_ix];
     cy = vertices[2 * first_vor_vert_ix + 1];
 
-    double V = voronoi_compute_centroid_volume_triangle(ax, ay, bx, by, cx, cy,
-                                                        centroid);
+    double V = geometry2d_compute_centroid_volume_triangle(ax, ay, bx, by, cx,
+                                                           cy, centroid);
     cell_volume += V;
     cell_centroid[0] += V * centroid[0];
     cell_centroid[1] += V * centroid[1];
@@ -468,8 +400,8 @@ static inline void voronoi_add_pair(struct voronoi *v, int sid,
   this_pair->right_cell = c;
   this_pair->left = left_part_pointer;
   this_pair->right = right_part_pointer;
-  this_pair->surface_area =
-      voronoi_compute_midpoint_area_face(ax, ay, bx, by, this_pair->midpoint);
+  this_pair->surface_area = geometry2d_compute_midpoint_area_face(
+      ax, ay, bx, by, this_pair->midpoint);
 #ifdef VORONOI_STORE_CONNECTIONS
   this_pair->a[0] = ax;
   this_pair->a[1] = ay;
