@@ -418,7 +418,7 @@ inline static void voronoi_init(struct voronoi *restrict v,
       face_vertices[0] = voronoi_vertices[3 * vor_vertex0_idx];
       face_vertices[1] = voronoi_vertices[3 * vor_vertex0_idx + 1];
       face_vertices[2] = voronoi_vertices[3 * vor_vertex0_idx + 2];
-      int face_vertices_index = 3;
+      int face_vertices_index = 1;
 
       /* Loop around the axis */
       while (next_t_idx != first_t_idx) {
@@ -430,31 +430,31 @@ inline static void voronoi_init(struct voronoi *restrict v,
               face_vertices, 3 * face_vertices_size * sizeof(double));
         }
         const int vor_vertex1_idx = cur_t_idx - 4;
-        face_vertices[face_vertices_index] =
+        face_vertices[3 * face_vertices_index] =
             voronoi_vertices[3 * vor_vertex1_idx];
-        face_vertices[face_vertices_index + 1] =
+        face_vertices[3 * face_vertices_index + 1] =
             voronoi_vertices[3 * vor_vertex1_idx + 1];
-        face_vertices[face_vertices_index + 2] =
+        face_vertices[3 * face_vertices_index + 2] =
             voronoi_vertices[3 * vor_vertex1_idx + 2];
         const int vor_vertex2_idx = next_t_idx - 4;
-        face_vertices[face_vertices_index + 3] =
+        face_vertices[3 * face_vertices_index + 3] =
             voronoi_vertices[3 * vor_vertex2_idx];
-        face_vertices[face_vertices_index + 4] =
+        face_vertices[3 * face_vertices_index + 4] =
             voronoi_vertices[3 * vor_vertex2_idx + 1];
-        face_vertices[face_vertices_index + 5] =
+        face_vertices[3 * face_vertices_index + 5] =
             voronoi_vertices[3 * vor_vertex2_idx + 2];
-        face_vertices_index += 6;
+        face_vertices_index += 2;
 
         /* Update cell volume and triangle_centroid */
         double tetrahedron_centroid[3];
         const double V = geometry3d_compute_centroid_volume_tetrahedron(
             ax, ay, az, face_vertices[0], face_vertices[1], face_vertices[2],
-            face_vertices[face_vertices_index - 6],
-            face_vertices[face_vertices_index - 5],
-            face_vertices[face_vertices_index - 4],
-            face_vertices[face_vertices_index - 3],
-            face_vertices[face_vertices_index - 2],
-            face_vertices[face_vertices_index - 1], tetrahedron_centroid);
+            face_vertices[3 * face_vertices_index - 6],
+            face_vertices[3 * face_vertices_index - 5],
+            face_vertices[3 * face_vertices_index - 4],
+            face_vertices[3 * face_vertices_index - 3],
+            face_vertices[3 * face_vertices_index - 2],
+            face_vertices[3 * face_vertices_index - 1], tetrahedron_centroid);
         this_cell->volume += V;
         this_cell->centroid[0] += V * tetrahedron_centroid[0];
         this_cell->centroid[1] += V * tetrahedron_centroid[1];
@@ -573,8 +573,8 @@ inline static void voronoi_print_grid(const struct voronoi *v,
   for (int ngb = 0; ngb < 2; ++ngb) {
     for (int i = 0; i < v->pair_index[ngb]; ++i) {
       struct voronoi_pair *pair = &v->pairs[ngb][i];
-      fprintf(file, "F\t%i\t%g\t%g\t%g", ngb, pair->surface_area,
-              pair->midpoint[0], pair->midpoint[1]);
+      fprintf(file, "F\t%i\t%g\t%g\t%g\t%g", ngb, pair->surface_area,
+              pair->midpoint[0], pair->midpoint[1], pair->midpoint[2]);
 #ifdef VORONOI_STORE_CONNECTIONS
       for (int j = 0; j < pair->n_vertices; j++) {
         fprintf(file, "\t(%g, %g, %g)", pair->vertices[3 * j], pair->vertices[3 * j + 1], pair->vertices[3 * j + 2]);

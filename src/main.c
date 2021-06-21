@@ -126,10 +126,10 @@ static inline void update_paths(int loop, double *vertices) {
 int main() {
   /* seed the random generator with the most random seed ever */
   srand(42);
-  int count[3] = {2, 2, 2};
+  int count[3] = {1, 1, 1};
   double dim[3] = {1., 1., 1.};
   struct cell c;
-  cell_init(&c, count, 0.2, dim);
+  cell_init(&c, count, 0.0, dim);
   cell_construct_local_delaunay(&c);
   cell_make_delaunay_periodic(&c);
   cell_construct_voronoi(&c);
