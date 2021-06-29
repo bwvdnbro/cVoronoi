@@ -42,4 +42,4 @@ def main(fname):
 
 
 if __name__ == "__main__":
-    main("vtest.txt")
+    main("vtest020.txt")

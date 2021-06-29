@@ -14,7 +14,7 @@
 
 -[X] Refactor voronoi2d code to match current version in swift
 -[X] Construction
--[ ] Documentation
+-[X] Documentation
 -[ ] Check with CmacIonize
 -[ ] Better visualisation
 
@@ -30,7 +30,7 @@ Algorithm:
 
 1. Calculate the centroid of each tetrahedron of the Delaunay tesselation and store those centroids in a temporary
    array.
-2. For each non-dummy, non-ghost generator:
+1. For each non-dummy, non-ghost generator:
     1. Create an array of flags to check whether a vertex was already considered as neighbour of the current generator
     1. Get a tetrahedron connected to this generator
     1. For all the other vertex_indices in this tetrahedron,

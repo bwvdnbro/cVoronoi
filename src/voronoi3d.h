@@ -39,6 +39,18 @@ struct voronoi_pair {
 #endif
 };
 
+/**
+ * @brief Initializes a voronoi pair (i.e. a face). The vertices of the face are
+ * only stored if VORONOI_STORE_CONNECTIONS is defined.
+ *
+ * @param pair Voronoi pair to initialize
+ * @param c Pointer to the SWIFT cell in which the right particle lives
+ * (NULL if this is the same cell as the left particle)
+ * @param left_part_pointer Pointer to the left particle of this pair
+ * @param right_part_pointer Pointer to the right particle of this pair
+ * @param vertices Vertices making up the face
+ * @param n_vertices Number of vertices in the vertices array.
+ */
 inline static void voronoi_pair_init(struct voronoi_pair *pair,
                                      struct cell *restrict c,
                                      int left_part_pointer,
@@ -62,21 +74,43 @@ inline static void voronoi_pair_init(struct voronoi_pair *pair,
 #endif
 }
 
+/**
+ * @brief Free up memory allocated by a voronoi pair (only necessary if
+ * VORONOI_STORE_CONNECTIONS is defined).
+ *
+ * @param pair
+ */
 inline static void voronoi_pair_destroy(struct voronoi_pair *pair) {
 #ifdef VORONOI_STORE_CONNECTIONS
   free(pair->vertices);
 #endif
 }
 
+/**
+ * @brief FIFO queue used during the voronoi construction.
+ */
 struct tetrahedron_vertex_queue {
+  /*! Array of indices (in Delaunay tesselation) of next neighbouring Delaunay
+   * vertices to check */
   int *vertex_indices;
+  /*! Array of indices (in Delaunay tesselation) of tetrahedra linked next
+   * neighbouring Delaunay vertices to check */
   int *tetrahedron_indices;
+  /*! Array of indices (in respective tetrahedra) of next neighbouring Delaunay
+   * vertices to check */
   int *vertex_tetrahedron_indices;
+  /*! Current allocated size for the queue */
   int size;
+  /*! Current index of the next element to pop */
   int index_start;
+  /*! Current index to push the next new element at */
   int index_end;
 };
 
+/**
+ * @brief Initialize an empty queue with initial size of 10
+ * @param t tetrahedron_vertex_queue
+ */
 inline static void tetrahedron_vertex_queue_init(
     struct tetrahedron_vertex_queue *t) {
   t->vertex_indices = (int *)malloc(10 * sizeof(int));
@@ -87,6 +121,10 @@ inline static void tetrahedron_vertex_queue_init(
   t->index_start = 0;
 }
 
+/**
+ * @brief Free up memory allocated by the queue (3 arrays).
+ * @param t tetrahedron_vertex_queue
+ */
 inline static void tetrahedron_vertex_queue_destroy(
     struct tetrahedron_vertex_queue *t) {
   free(t->vertex_indices);
@@ -94,12 +132,29 @@ inline static void tetrahedron_vertex_queue_destroy(
   free(t->vertex_tetrahedron_indices);
 }
 
+/**
+ * @brief Reset the queue without reallocating memory.
+ *
+ * This resets the start and end indices, effectively deleting all items from
+ * the queue as they will be overwritten when new elements are added.
+ *
+ * @param t tetrahedron_vertex_queue
+ */
 inline static void tetrahedron_vertex_queue_reset(
     struct tetrahedron_vertex_queue *t) {
   t->index_start = 0;
   t->index_end = 0;
 }
 
+/**
+ * @brief Push a new tuple of (vertex index, associated tetrahedron index and
+ * vertex index in associated tetrahedron) to the end of the queue.
+ *
+ * @param t tetrahedron_vertex_queue
+ * @param t_idx Index of a tetrahedron containing the Delaunay vertex.
+ * @param v_idx Index of the Delaunay vertex (in the Delaunay tesselation).
+ * @param v_idx_in_t Index of Delaunay vertex in its associated tetrahedron
+ */
 inline static void tetrahedron_vertex_queue_push(
     struct tetrahedron_vertex_queue *t, int t_idx, int v_idx, int v_idx_in_t) {
   if (t->index_end == t->size) {
@@ -117,6 +172,17 @@ inline static void tetrahedron_vertex_queue_push(
   t->index_end++;
 }
 
+/**
+ * Pop a (vertex index, associated tetrahedron index and vertex index in
+ * associated tetrahedron) tuple from the front of the queue.
+ *
+ * @param t tetrahedron_vertex_queue
+ * @param t_idx (return) Index of a tetrahedron containing the Delaunay vertex.
+ * @param v_idx (return) Index of the Delaunay vertex (in the Delaunay
+ *                       tesselation).
+ * @param v_idx_in_t (return) Index of Delaunay vertex in its associated
+ *                            tetrahedron
+ */
 inline static void tetrahedron_vertex_queue_pop(
     struct tetrahedron_vertex_queue *t, int *t_idx, int *v_idx,
     int *v_idx_in_t) {
@@ -132,6 +198,12 @@ inline static void tetrahedron_vertex_queue_pop(
   }
 }
 
+/**
+ * @brief Check whether queue is empty or not.
+ *
+ * @param t tetrahedron_vertex_queue
+ * @return 1 for empty queue, 0 for nonempty queue.
+ */
 inline static int tetrahedron_vertex_queue_is_empty(
     struct tetrahedron_vertex_queue *t) {
   return t->index_start == t->index_end;
@@ -192,6 +264,26 @@ inline static int voronoi_new_face(struct voronoi *v, int sid,
                                    int n_vertices);
 inline static void voronoi_check_grid(struct voronoi *restrict v);
 
+/**
+ * @brief Initialise the Voronoi grid based on the given Delaunay tessellation.
+ *
+ * This function allocates the memory for the Voronoi grid arrays and creates
+ * the grid in linear time by
+ *  1. Computing the grid vertices as the midpoints of the circumcircles of the
+ *     Delaunay tetrahedra.
+ *  2. Looping over all vertices and for each generator looping over all
+ *     tetrahedra that link to that vertex. This is done by looping around all
+ *     the Delaunay edges connected to that generator. While looping around an
+ *     edge, for each tetrahedron, we add the edges of that tetrahedron which
+ *     are connected to the current generator to a queue of next edges to loop
+ *     around (if we did not already do so).
+ *
+ * During the second step, the geometrical properties (cell centroid, volume
+ * and face midpoint, area) are computed as well.
+ *
+ * @param v Voronoi grid.
+ * @param d Delaunay tessellation (read-only).
+ */
 inline static void voronoi_init(struct voronoi *restrict v,
                                 struct delaunay *restrict d) {
   delaunay_assert(d->vertex_end > 0);
@@ -222,7 +314,7 @@ inline static void voronoi_init(struct voronoi *restrict v,
     int v3 = t->vertices[3];
     voronoi_assert(v0 >= 0 && v1 >= 0 && v2 >= 0 && v3 >= 0);
 
-    /* if the triangle is not linked to a non-ghost, non-dummy vertex, it is not
+    /* if the tetrahedron is not linked to a non-ghost, non-dummy vertex, it is not
      * a grid vertex and we can skip it. */
     if (v0 >= v->number_of_cells && v1 >= v->number_of_cells &&
         v2 >= v->number_of_cells && v3 >= v->number_of_cells) {
@@ -242,7 +334,7 @@ inline static void voronoi_init(struct voronoi *restrict v,
        * Or that we did not add all the necessary ghost vertex_indices to the
        * delaunay tesselation. */
       voronoi_error(
-          "Vertex is part of triangle with Dummy vertex! This could mean that "
+          "Vertex is part of tetrahedron with Dummy vertex! This could mean that "
           "one of the neighbouring cells is empty.");
     }
     if (v1 < d->vertex_end || v1 >= d->ghost_offset) {
@@ -251,7 +343,7 @@ inline static void voronoi_init(struct voronoi *restrict v,
       v1z = d->vertices[3 * v1 + 2];
     } else {
       voronoi_error(
-          "Vertex is part of triangle with Dummy vertex! This could mean that "
+          "Vertex is part of tetrahedron with Dummy vertex! This could mean that "
           "one of the neighbouring cells is empty.");
     }
     if (v2 < d->vertex_end || v2 >= d->ghost_offset) {
@@ -260,7 +352,7 @@ inline static void voronoi_init(struct voronoi *restrict v,
       v2z = d->vertices[3 * v2 + 2];
     } else {
       voronoi_error(
-          "Vertex is part of triangle with Dummy vertex! This could mean that "
+          "Vertex is part of tetrahedron with Dummy vertex! This could mean that "
           "one of the neighbouring cells is empty.");
     }
     if (v3 < d->vertex_end || v3 >= d->ghost_offset) {
@@ -269,7 +361,7 @@ inline static void voronoi_init(struct voronoi *restrict v,
       v3z = d->vertices[3 * v3 + 2];
     } else {
       voronoi_error(
-          "Vertex is part of triangle with Dummy vertex! This could mean that "
+          "Vertex is part of tetrahedron with Dummy vertex! This could mean that "
           "one of the neighbouring cells is empty.");
     }
 
@@ -445,7 +537,7 @@ inline static void voronoi_init(struct voronoi *restrict v,
             voronoi_vertices[3 * vor_vertex2_idx + 2];
         face_vertices_index += 2;
 
-        /* Update cell volume and triangle_centroid */
+        /* Update cell volume and tetrahedron_centroid */
         double tetrahedron_centroid[3];
         const double V = geometry3d_compute_centroid_volume_tetrahedron(
             ax, ay, az, face_vertices[0], face_vertices[1], face_vertices[2],
@@ -514,6 +606,47 @@ inline static void voronoi_init(struct voronoi *restrict v,
   voronoi_check_grid(v);
 }
 
+/**
+ * @brief Free up all memory used by the Voronoi grid.
+ *
+ * @param v Voronoi grid.
+ */
+inline static void voronoi_destroy(struct voronoi *restrict v) {
+  free(v->cells);
+  for (int i = 0; i < 2; ++i) {
+    for (int j = 0; j < v->pair_index[i]; j ++) {
+      voronoi_pair_destroy(&v->pairs[i][j]);
+    }
+    free(v->pairs[i]);
+  }
+}
+
+/**
+ * @brief Add a face (two particle pair) to the mesh.
+ *
+ * The grid connectivity is stored per cell sid: sid=13 corresponds to particle
+ * pairs encountered during a self task (both particles are within the local
+ * cell), while sid=0-12 and 14-26 correspond to particle interactions for which
+ * the right neighbour is part of one of the 26 neighbouring cells.
+ *
+ * For each pair, we compute and store all the quantities required to compute
+ * fluxes between the Voronoi cells: the surface area and midpoint of the
+ * interface.
+ *
+ * @param v Voronoi grid.
+ * @param sid 0 for pairs entirely in this cell, 1 for pairs between this cell
+ * and a neighbouring cell (in SWIFT we use the convention from the description).
+ * @param cell Pointer to the cell of the right particle (NULL if the right
+ * particle lives in the same cell as the left particle). For SWIFT only.
+ * @param left_part_pointer Index of left particle in cell (particle in the
+ * cell linked to this grid). FUTURE NOTE: For SWIFT, replace this with direct
+ * pointer to the left particle.
+ * @param right_part_pointer Index of right particle in cell (particle in the
+ * cell linked to this grid), or -1 for ghost vertices. FUTURE NOTE: For SWIFT,
+ * replace this with direct pointer to the right particle.
+ * @param vertices Vertices of the interface.
+ * @param n_vertices Number of vertices in the vertices array.
+ */
 inline static int voronoi_new_face(struct voronoi *v, int sid,
                                    struct cell *restrict c,
                                    int left_part_pointer,
@@ -532,16 +665,11 @@ inline static int voronoi_new_face(struct voronoi *v, int sid,
   return v->pair_index[sid]++;
 }
 
-inline static void voronoi_destroy(struct voronoi *restrict v) {
-  free(v->cells);
-  for (int i = 0; i < 2; ++i) {
-    for (int j = 0; j < v->pair_index[i]; j ++) {
-      voronoi_pair_destroy(&v->pairs[i][j]);
-    }
-    free(v->pairs[i]);
-  }
-}
-
+/**
+ * @brief Sanity checks on the grid.
+ *
+ * Right now, this only checks the total volume of the cells.
+ */
 inline static void voronoi_check_grid(struct voronoi *restrict v) {
   double total_volume = 0.;
   for (int i = 0; i < v->number_of_cells; i++) {
@@ -550,6 +678,20 @@ inline static void voronoi_check_grid(struct voronoi *restrict v) {
   fprintf(stderr, "Total volume: %g\n", total_volume);
 }
 
+/**
+ * @brief Write the Voronoi grid information to the given file.
+ *
+ * The output depends on the configuration. The maximal output contains 3
+ * different types of output lines:
+ *  - "G\tgx\tgx: x and y position of a single grid generator (optional).
+ *  - "C\tcx\tcy\tV\tnface": centroid position, volume and (optionally) number
+ *    of faces for a single Voronoi cell.
+ *  - "F\tsid\tarea\tcx\tcy\tcz\t(v0x, v0y, v0z)\t...\t(vNx, vNy, vNz)": sid,
+ *    area, coordinates of centroid, coordinates of vertices of face (optional).
+ *
+ * @param v Voronoi grid.
+ * @param file File to write to.
+ */
 inline static void voronoi_print_grid(const struct voronoi *v,
                                       const char *filename) {
   FILE *file = fopen(filename, "w");
@@ -587,6 +729,14 @@ inline static void voronoi_print_grid(const struct voronoi *v,
   fclose(file);
 }
 
+/**
+ * @brief Check whether two doubles are equal up to the given precision.
+ *
+ * @param double1
+ * @param double2
+ * @param precision
+ * @return 1 for equality 0 else.
+ */
 inline static int double_cmp(double double1, double double2,
                              unsigned long precision) {
   long long1, long2;
