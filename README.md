@@ -2,21 +2,21 @@
 
 ### TODO: Delaunay3D
 
--[X] check in-sphere criterion in check_tesselation
--[X] print and plot tesselation
--[x] Flips for degenerate cases
--[X] Periodic boundary conditions (implemented in dummy way by simpy copying the entire domain to all directions)
--[X] Vertex tetrahedra links (needed for Voronoi construction)
--[ ] Non-exact tests
--[ ] Delaunay search radius & better PBC
+- [X] check in-sphere criterion in check_tesselation
+- [X] print and plot tesselation
+- [x] Flips for degenerate cases
+- [X] Periodic boundary conditions (implemented in dummy way by simpy copying the entire domain to all directions)
+- [X] Vertex tetrahedra links (needed for Voronoi construction)
+- [ ] Non-exact tests
+- [ ] Delaunay search radius & better PBC
 
 ### TODO: Voronoi3D
 
--[X] Refactor voronoi2d code to match current version in swift
--[X] Construction
--[X] Documentation
--[ ] Check with CmacIonize
--[ ] Better visualisation
+- [X] Refactor voronoi2d code to match current version in swift
+- [X] Construction
+- [X] Documentation
+- [ ] Check with CmacIonize
+- [ ] Better visualisation
 
 #### Construction:
 
