@@ -382,6 +382,14 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
                               c->vertices[3 * l + 2] + shiftz);
     }
   }
+#ifdef DELAUNAY_CHECKS
+  for (int i = c->d.vertex_start; i < c->d.vertex_end; i++){
+    double search_radius = delaunay_get_search_radius(&c->d, i);
+    double radius = delaunay_get_radius(&c->d, c->d.vertex_tetrahedron_links[i]);
+    delaunay_assert(search_radius >= 2. * radius);
+    delaunay_assert(search_radius < c->hs.side[0]);
+  }
+#endif
 #endif
 }
 

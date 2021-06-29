@@ -7,9 +7,10 @@
 - [x] Flips for degenerate cases
 - [X] Periodic boundary conditions (implemented in dummy way by simpy copying the entire domain to all directions)
 - [X] Vertex tetrahedra links (needed for Voronoi construction)
-- [ ] Delaunay search radius
+- [X] Delaunay search radius
 - [ ] better PBC
 - [ ] Non-exact tests
+- [ ] Add general queue struct (using preprocessor?)
 
 ### TODO: Voronoi3D
 

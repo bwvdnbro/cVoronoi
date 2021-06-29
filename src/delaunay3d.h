@@ -11,6 +11,7 @@
 #include "geometry.h"
 #include "hydro_space.h"
 #include "tetrahedron.h"
+#include "tetrahedron_vertex_queue.h"
 
 /* Forward declarations */
 struct delaunay;
@@ -41,6 +42,8 @@ inline static int delaunay_check_tetrahedron(struct delaunay* d, int t, int v);
 inline static int positive_permutation(int a, int b, int c, int d);
 inline static double delaunay_get_radius(const struct delaunay* restrict d,
                                          int t);
+inline static int delaunay_test_orientation(struct delaunay* restrict d, int v0,
+                                            int v1, int v2, int v3);
 
 struct delaunay {
 
@@ -176,6 +179,10 @@ struct delaunay {
    */
   int last_tetrahedron;
 
+  struct tetrahedron_vertex_queue get_radius_queue;
+
+  int* get_radius_flags;
+
   /*! @brief Geometry variables. Auxiliary variables used by the exact integer
    *  geometry3d tests that need to be stored in between tests, since allocating
    *  and deallocating them for every test is too expensive. */
@@ -239,6 +246,10 @@ inline static void delaunay_init(struct delaunay* restrict d,
   d->free_indices_queue = (int*)malloc(10 * sizeof(int));
   d->free_indices_q_index = 0;
   d->free_indices_q_size = 10;
+
+  /* allocate the tetrahedron_vertex_queue used by the get_radius_function */
+  tetrahedron_vertex_queue_init(&d->get_radius_queue);
+  d->get_radius_flags = (int*)malloc(vertex_size * sizeof(int));
 
   /* allocate memory for the array of tetrahedra containing the current vertex
    * Initial size is 10, may grow a lot for degenerate cases... */
@@ -332,6 +343,8 @@ inline static void delaunay_destroy(struct delaunay* restrict d) {
   free(d->tetrahedron_queue);
   free(d->free_indices_queue);
   free(d->tetrahedra_containing_vertex);
+  tetrahedron_vertex_queue_destroy(&d->get_radius_queue);
+  free(d->get_radius_flags);
   geometry3d_destroy(&d->geometry);
 }
 
@@ -435,6 +448,9 @@ inline static void delaunay_init_vertex(struct delaunay* restrict d,
 
   /* initialise the search radii to the largest possible value */
   d->search_radii[v] = DBL_MAX;
+
+  /* initialize the get_radius_flag to 0 */
+  d->get_radius_flags[v] = 0;
 }
 
 /**
@@ -471,6 +487,8 @@ inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
                                                 d->vertex_size * sizeof(int));
     d->search_radii =
         (double*)realloc(d->search_radii, d->vertex_size * sizeof(double));
+    d->get_radius_flags =
+        (int*)realloc(d->get_radius_flags, d->vertex_size * sizeof(int));
   }
 
   delaunay_init_vertex(d, d->vertex_index, x, y, z);
@@ -1770,20 +1788,130 @@ inline static double delaunay_get_radius(const struct delaunay* restrict d,
   double v3y = d->vertices[3 * v3 + 1];
   double v3z = d->vertices[3 * v3 + 2];
 
-  double circumcenter;
+  double circumcenter[3];
   geometry3d_compute_circumcenter(v0x, v0y, v0z, v1x, v1y, v1z, v2x, v2y, v2z,
-                                  v3x, v3y, v3z, &circumcenter);
+                                  v3x, v3y, v3z, circumcenter);
 
-  double Rx = circumcenter - v0x;
-  double Ry = circumcenter - v0y;
-  double Rz = circumcenter - v0z;
+  double Rx = circumcenter[0] - v0x;
+  double Ry = circumcenter[1] - v0y;
+  double Rz = circumcenter[2] - v0z;
 
   return sqrt(Rx * Rx + Ry * Ry + Rz * Rz);
 }
 
 inline static double delaunay_get_search_radius(struct delaunay* restrict d,
-                                                int vi) {
-  return d->search_radii[vi];
+                                                int gen_idx_in_d) {
+  /* Clean up */
+  delaunay_assert(tetrahedron_vertex_queue_is_empty(&d->get_radius_queue));
+  tetrahedron_vertex_queue_reset(&d->get_radius_queue);
+#ifdef DELAUNAY_CHECKS
+  for (int i = 0; i < d->vertex_index; i++) {
+    if (d->get_radius_flags[i]) {
+      fprintf(stderr, "Found nonzero flag at start of get_radius!");
+      abort();
+    }
+  }
+#endif
+
+  /* start */
+  d->get_radius_flags[gen_idx_in_d] = 1;
+
+  /* Get a tetrahedron containing the central generator */
+  int t_idx = d->vertex_tetrahedron_links[gen_idx_in_d];
+  int gen_idx_in_t = d->vertex_tetrahedron_index[gen_idx_in_d];
+
+  /* Pick another vertex (generator) from this tetrahedron and add it to the
+   * queue */
+  int other_v_idx_in_t = (gen_idx_in_t + 1) % 4;
+  struct tetrahedron* t = &d->tetrahedra[t_idx];
+  int other_v_idx_in_d = t->vertices[other_v_idx_in_t];
+  tetrahedron_vertex_queue_push(&d->get_radius_queue, t_idx, other_v_idx_in_d,
+                                other_v_idx_in_t);
+  /* update flag of the other vertex */
+  d->get_radius_flags[other_v_idx_in_d] = 1;
+
+  double search_radius = 0.;
+
+  /* Loop over all neighbouring vertices of the current vertex */
+  while (!tetrahedron_vertex_queue_is_empty(&d->get_radius_queue)) {
+    /* Pop the next axis vertex and corresponding tetrahedron from the queue*/
+    int prev_t_idx, axis_idx_in_d, axis_idx_in_t;
+    tetrahedron_vertex_queue_pop(&d->get_radius_queue, &prev_t_idx,
+                                 &axis_idx_in_d, &axis_idx_in_t);
+
+    /* Set initial value for search radius */
+    search_radius =
+        fmax(search_radius, 2. * delaunay_get_radius(d, prev_t_idx));
+
+    struct tetrahedron* prev_t = &d->tetrahedra[prev_t_idx];
+
+    /* Get a non axis vertex from first_t */
+    int non_axis_idx_in_prev_t = (axis_idx_in_t + 1) % 4;
+    if (prev_t->vertices[non_axis_idx_in_prev_t] == gen_idx_in_d) {
+      non_axis_idx_in_prev_t = (non_axis_idx_in_prev_t + 1) % 4;
+    }
+    int non_axis_idx_in_d = prev_t->vertices[non_axis_idx_in_prev_t];
+
+    if (!d->get_radius_flags[non_axis_idx_in_d]) {
+      /* Add this vertex and tetrahedron to the queue and update its flag */
+      tetrahedron_vertex_queue_push(&d->get_radius_queue, prev_t_idx,
+                                    non_axis_idx_in_d, non_axis_idx_in_prev_t);
+      d->get_radius_flags[non_axis_idx_in_d] |= 1;
+    }
+
+    /* Get a neighbouring tetrahedron of first_t sharing the axis */
+    int cur_t_idx = prev_t->neighbours[non_axis_idx_in_prev_t];
+    int prev_t_idx_in_cur_t =
+        prev_t->index_in_neighbour[non_axis_idx_in_prev_t];
+
+    /* Loop around the axis */
+    int first_t_idx = prev_t_idx;
+    while (cur_t_idx != first_t_idx) {
+      /* Update search radius */
+      search_radius =
+          fmax(search_radius, 2. * delaunay_get_radius(d, cur_t_idx));
+
+      /* Update the variables */
+      prev_t_idx = cur_t_idx;
+      prev_t = &d->tetrahedra[prev_t_idx];
+      /* get the next non axis vertex */
+      non_axis_idx_in_prev_t = (prev_t_idx_in_cur_t + 1) % 4;
+      non_axis_idx_in_d = prev_t->vertices[non_axis_idx_in_prev_t];
+      while (non_axis_idx_in_d == axis_idx_in_d ||
+             non_axis_idx_in_d == gen_idx_in_d) {
+        non_axis_idx_in_prev_t = (non_axis_idx_in_prev_t + 1) % 4;
+        non_axis_idx_in_d = prev_t->vertices[non_axis_idx_in_prev_t];
+      }
+      /* Add it to the queue if necessary */
+      if (!d->get_radius_flags[non_axis_idx_in_d]) {
+        /* Add this vertex and tetrahedron to the queue and update its flag */
+        tetrahedron_vertex_queue_push(&d->get_radius_queue, prev_t_idx,
+                                      non_axis_idx_in_d,
+                                      non_axis_idx_in_prev_t);
+        d->get_radius_flags[non_axis_idx_in_d] |= 1;
+      }
+      /* Get the next tetrahedron sharing the same axis */
+      cur_t_idx = prev_t->neighbours[non_axis_idx_in_prev_t];
+      prev_t_idx_in_cur_t = prev_t->index_in_neighbour[non_axis_idx_in_prev_t];
+    }
+  }
+
+  /* reset flags */
+  d->get_radius_flags[gen_idx_in_d] = 0;
+  for (int i = 0; i < d->get_radius_queue.index_end; i++) {
+    delaunay_assert(d->get_radius_queue.vertex_indices[i] < d->vertex_index)
+        d->get_radius_flags[d->get_radius_queue.vertex_indices[i]] = 0;
+  }
+#ifdef DELAUNAY_CHECKS
+  for (int i = 0; i < d->vertex_index; i++) {
+    if (d->get_radius_flags[i]) {
+      fprintf(stderr, "Found nonzero flag at end of get_radius!");
+      abort();
+    }
+  }
+#endif
+
+  return search_radius;
 }
 
 /**
@@ -1943,6 +2071,28 @@ inline static void delaunay_print_tessellation(
   }
 
   fclose(file);
+}
+
+inline static int delaunay_test_orientation(struct delaunay* restrict d, int v0,
+                                            int v1, int v2, int v3) {
+  const unsigned long aix = d->integer_vertices[3 * v0];
+  const unsigned long aiy = d->integer_vertices[3 * v0 + 1];
+  const unsigned long aiz = d->integer_vertices[3 * v0 + 2];
+
+  const unsigned long bix = d->integer_vertices[3 * v1];
+  const unsigned long biy = d->integer_vertices[3 * v1 + 1];
+  const unsigned long biz = d->integer_vertices[3 * v1 + 2];
+
+  const unsigned long cix = d->integer_vertices[3 * v2];
+  const unsigned long ciy = d->integer_vertices[3 * v2 + 1];
+  const unsigned long ciz = d->integer_vertices[3 * v2 + 2];
+
+  const unsigned long dix = d->integer_vertices[3 * v3];
+  const unsigned long diy = d->integer_vertices[3 * v3 + 1];
+  const unsigned long diz = d->integer_vertices[3 * v3 + 2];
+
+  return geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz,
+                                 cix, ciy, ciz, dix, diy, diz);
 }
 
 /**
