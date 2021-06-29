@@ -7,8 +7,9 @@
 - [x] Flips for degenerate cases
 - [X] Periodic boundary conditions (implemented in dummy way by simpy copying the entire domain to all directions)
 - [X] Vertex tetrahedra links (needed for Voronoi construction)
+- [ ] Delaunay search radius
+- [ ] better PBC
 - [ ] Non-exact tests
-- [ ] Delaunay search radius & better PBC
 
 ### TODO: Voronoi3D
 
