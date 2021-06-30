@@ -32,13 +32,15 @@
 struct QUEUE_NAME {
   QUEUE_TYPE *values;
   int size;
-  int index;
+  int start;
+  int end;
 };
 
 inline static void QUEUE_INIT(struct QUEUE_NAME *q, int size) {
   q->values = (QUEUE_TYPE *)malloc(size * sizeof(QUEUE_TYPE));
   q->size = size;
-  q->index = 0;
+  q->start = 0;
+  q->end = 0;
 }
 
 inline static void QUEUE_DESTROY(struct QUEUE_NAME *q) {
@@ -46,20 +48,21 @@ inline static void QUEUE_DESTROY(struct QUEUE_NAME *q) {
 }
 
 inline static void QUEUE_RESET(struct QUEUE_NAME *q) {
-  q->index = 0;
+  q->start = 0;
+  q->end = 0;
 }
 
 inline static int QUEUE_IS_EMPTY(struct QUEUE_NAME *q) {
-  return q->index == 0;
+  return q->start == q->end;
 }
 
 inline static void QUEUE_PUSH(struct QUEUE_NAME *q, QUEUE_TYPE value) {
-  if (q->size == q->index) {
+  if (q->size == q->end) {
     q->size <<= 1;
     q->values = realloc(q->values, q->size * sizeof(QUEUE_TYPE));
   }
-  q->values[q->index] = value;
-  q->index++;
+  q->values[q->end] = value;
+  q->end++;
 }
 
 inline static QUEUE_TYPE QUEUE_POP(struct QUEUE_NAME *q) {
@@ -69,8 +72,9 @@ inline static QUEUE_TYPE QUEUE_POP(struct QUEUE_NAME *q) {
     abort();
   }
 #endif
-  q->index--;
-  return q->values[q->index];
+  QUEUE_TYPE v = q->values[q->start];
+  q->start++;
+  return v;
 }
 
 /* Undefine QUEUE_NAME and QUEUE_TYPE */
