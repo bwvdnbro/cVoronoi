@@ -140,7 +140,6 @@ int main() {
   int3_fifo_queue_push(&q3, t);
   int3 v = int3_fifo_queue_pop(&q3);
   int3_fifo_queue_destroy(&q3);
-  return 0;
 
   /* seed the random generator with the most random seed ever */
   srand(42);

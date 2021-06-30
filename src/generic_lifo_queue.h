@@ -76,3 +76,4 @@ inline static QUEUE_TYPE QUEUE_POP(struct QUEUE_NAME *q) {
 /* Undefine QUEUE_NAME and QUEUE_TYPE */
 #undef QUEUE_NAME
 #undef QUEUE_TYPE
+#undef _NAME

@@ -10,8 +10,8 @@
 
 #include "geometry.h"
 #include "hydro_space.h"
+#include "queues.h"
 #include "tetrahedron.h"
-#include "tetrahedron_vertex_queue.h"
 
 /* Forward declarations */
 struct delaunay;
@@ -179,7 +179,7 @@ struct delaunay {
    */
   int last_tetrahedron;
 
-  struct tetrahedron_vertex_queue get_radius_queue;
+  struct int3_fifo_queue get_radius_queue;
 
   int* get_radius_flags;
 
@@ -248,7 +248,7 @@ inline static void delaunay_init(struct delaunay* restrict d,
   d->free_indices_q_size = 10;
 
   /* allocate the tetrahedron_vertex_queue used by the get_radius_function */
-  tetrahedron_vertex_queue_init(&d->get_radius_queue);
+  int3_fifo_queue_init(&d->get_radius_queue, 10);
   d->get_radius_flags = (int*)malloc(vertex_size * sizeof(int));
 
   /* allocate memory for the array of tetrahedra containing the current vertex
@@ -343,7 +343,7 @@ inline static void delaunay_destroy(struct delaunay* restrict d) {
   free(d->tetrahedron_queue);
   free(d->free_indices_queue);
   free(d->tetrahedra_containing_vertex);
-  tetrahedron_vertex_queue_destroy(&d->get_radius_queue);
+  int3_fifo_queue_destroy(&d->get_radius_queue);
   free(d->get_radius_flags);
   geometry3d_destroy(&d->geometry);
 }
@@ -1802,8 +1802,8 @@ inline static double delaunay_get_radius(const struct delaunay* restrict d,
 inline static double delaunay_get_search_radius(struct delaunay* restrict d,
                                                 int gen_idx_in_d) {
   /* Clean up */
-  delaunay_assert(tetrahedron_vertex_queue_is_empty(&d->get_radius_queue));
-  tetrahedron_vertex_queue_reset(&d->get_radius_queue);
+  delaunay_assert(int3_fifo_queue_is_empty(&d->get_radius_queue));
+  int3_fifo_queue_reset(&d->get_radius_queue);
 #ifdef DELAUNAY_CHECKS
   for (int i = 0; i < d->vertex_index; i++) {
     if (d->get_radius_flags[i]) {
@@ -1825,19 +1825,22 @@ inline static double delaunay_get_search_radius(struct delaunay* restrict d,
   int other_v_idx_in_t = (gen_idx_in_t + 1) % 4;
   struct tetrahedron* t = &d->tetrahedra[t_idx];
   int other_v_idx_in_d = t->vertices[other_v_idx_in_t];
-  tetrahedron_vertex_queue_push(&d->get_radius_queue, t_idx, other_v_idx_in_d,
-                                other_v_idx_in_t);
-  /* update flag of the other vertex */
+  /* Add the vertex info to the queue */
+  int3 vertex_info = {
+      ._0 = t_idx, ._1 = other_v_idx_in_d, ._2 = other_v_idx_in_t};
+  int3_fifo_queue_push(&d->get_radius_queue, vertex_info);
+  /* update flag of the other vertex indicating that it was added to the queue*/
   d->get_radius_flags[other_v_idx_in_d] = 1;
 
   double search_radius = 0.;
 
   /* Loop over all neighbouring vertices of the current vertex */
-  while (!tetrahedron_vertex_queue_is_empty(&d->get_radius_queue)) {
+  while (!int3_fifo_queue_is_empty(&d->get_radius_queue)) {
     /* Pop the next axis vertex and corresponding tetrahedron from the queue*/
-    int prev_t_idx, axis_idx_in_d, axis_idx_in_t;
-    tetrahedron_vertex_queue_pop(&d->get_radius_queue, &prev_t_idx,
-                                 &axis_idx_in_d, &axis_idx_in_t);
+    int3 info = int3_fifo_queue_pop(&d->get_radius_queue);
+    int prev_t_idx = info._0;
+    int axis_idx_in_d = info._1;
+    int axis_idx_in_t = info._2;
 
     /* Set initial value for search radius */
     search_radius =
@@ -1854,8 +1857,11 @@ inline static double delaunay_get_search_radius(struct delaunay* restrict d,
 
     if (!d->get_radius_flags[non_axis_idx_in_d]) {
       /* Add this vertex and tetrahedron to the queue and update its flag */
-      tetrahedron_vertex_queue_push(&d->get_radius_queue, prev_t_idx,
-                                    non_axis_idx_in_d, non_axis_idx_in_prev_t);
+      int3 new_info = {._0 = prev_t_idx,
+                       ._1 = non_axis_idx_in_d,
+                       ._2 = non_axis_idx_in_prev_t};
+      int3_fifo_queue_push(&d->get_radius_queue, new_info);
+      /* update flag */
       d->get_radius_flags[non_axis_idx_in_d] |= 1;
     }
 
@@ -1885,9 +1891,11 @@ inline static double delaunay_get_search_radius(struct delaunay* restrict d,
       /* Add it to the queue if necessary */
       if (!d->get_radius_flags[non_axis_idx_in_d]) {
         /* Add this vertex and tetrahedron to the queue and update its flag */
-        tetrahedron_vertex_queue_push(&d->get_radius_queue, prev_t_idx,
-                                      non_axis_idx_in_d,
-                                      non_axis_idx_in_prev_t);
+        int3 new_info = {._0 = prev_t_idx,
+                         ._1 = non_axis_idx_in_d,
+                         ._2 = non_axis_idx_in_prev_t};
+        int3_fifo_queue_push(&d->get_radius_queue, new_info);
+        /* update flag */
         d->get_radius_flags[non_axis_idx_in_d] |= 1;
       }
       /* Get the next tetrahedron sharing the same axis */
@@ -1898,9 +1906,9 @@ inline static double delaunay_get_search_radius(struct delaunay* restrict d,
 
   /* reset flags */
   d->get_radius_flags[gen_idx_in_d] = 0;
-  for (int i = 0; i < d->get_radius_queue.index_end; i++) {
-    delaunay_assert(d->get_radius_queue.vertex_indices[i] < d->vertex_index)
-        d->get_radius_flags[d->get_radius_queue.vertex_indices[i]] = 0;
+  for (int i = 0; i < d->get_radius_queue.end; i++) {
+    delaunay_assert(d->get_radius_queue.values[i]._1 < d->vertex_index);
+    d->get_radius_flags[d->get_radius_queue.values[i]._1] = 0;
   }
 #ifdef DELAUNAY_CHECKS
   for (int i = 0; i < d->vertex_index; i++) {
