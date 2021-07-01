@@ -5,7 +5,8 @@
 #ifndef CVORONOI_VORONOI3D_H
 #define CVORONOI_VORONOI3D_H
 
-#include "tetrahedron_vertex_queue.h"
+#include "queues.h"
+#include "tuples.h"
 
 /**
  * @brief Voronoi interface.
@@ -184,19 +185,20 @@ inline static void voronoi_init(struct voronoi *restrict v,
      generators) */
   for (int i = 0; i < d->tetrahedron_index - 4; i++) {
     struct tetrahedron *t = &d->tetrahedra[i + 4];
-    /* Skip inactive (deleted, but not yet replaced) tetrahedra */
-    if (!t->active) continue;
-
+    /* Get the indices of the vertices of the tetrahedron */
     int v0 = t->vertices[0];
     int v1 = t->vertices[1];
     int v2 = t->vertices[2];
     int v3 = t->vertices[3];
     voronoi_assert(v0 >= 0 && v1 >= 0 && v2 >= 0 && v3 >= 0);
 
-    /* if the tetrahedron is not linked to a non-ghost, non-dummy vertex, it is not
-     * a grid vertex and we can skip it. */
-    if (v0 >= v->number_of_cells && v1 >= v->number_of_cells &&
-        v2 >= v->number_of_cells && v3 >= v->number_of_cells) {
+    /* if the tetrahedron is inactive or not linked to a non-ghost, non-dummy
+     * vertex, it is not a grid vertex and we can skip it. */
+    if (!t->active || (v0 >= v->number_of_cells && v1 >= v->number_of_cells &&
+        v2 >= v->number_of_cells && v3 >= v->number_of_cells)) {
+      voronoi_vertices[3 * i] = NAN;
+      voronoi_vertices[3 * i + 1] = NAN;
+      voronoi_vertices[3 * i + 2] = NAN;
       continue;
     }
 
@@ -213,8 +215,8 @@ inline static void voronoi_init(struct voronoi *restrict v,
        * Or that we did not add all the necessary ghost vertex_indices to the
        * delaunay tesselation. */
       voronoi_error(
-          "Vertex is part of tetrahedron with Dummy vertex! This could mean that "
-          "one of the neighbouring cells is empty.");
+          "Vertex is part of tetrahedron with Dummy vertex! This could mean "
+          "that one of the neighbouring cells is empty.");
     }
     if (v1 < d->vertex_end || v1 >= d->ghost_offset) {
       v1x = d->vertices[3 * v1];
@@ -222,8 +224,8 @@ inline static void voronoi_init(struct voronoi *restrict v,
       v1z = d->vertices[3 * v1 + 2];
     } else {
       voronoi_error(
-          "Vertex is part of tetrahedron with Dummy vertex! This could mean that "
-          "one of the neighbouring cells is empty.");
+          "Vertex is part of tetrahedron with Dummy vertex! This could mean "
+          "that one of the neighbouring cells is empty.");
     }
     if (v2 < d->vertex_end || v2 >= d->ghost_offset) {
       v2x = d->vertices[3 * v2];
@@ -231,7 +233,8 @@ inline static void voronoi_init(struct voronoi *restrict v,
       v2z = d->vertices[3 * v2 + 2];
     } else {
       voronoi_error(
-          "Vertex is part of tetrahedron with Dummy vertex! This could mean that "
+          "Vertex is part of tetrahedron with Dummy vertex! This could mean "
+          "that "
           "one of the neighbouring cells is empty.");
     }
     if (v3 < d->vertex_end || v3 >= d->ghost_offset) {
@@ -240,8 +243,8 @@ inline static void voronoi_init(struct voronoi *restrict v,
       v3z = d->vertices[3 * v3 + 2];
     } else {
       voronoi_error(
-          "Vertex is part of tetrahedron with Dummy vertex! This could mean that "
-          "one of the neighbouring cells is empty.");
+          "Vertex is part of tetrahedron with Dummy vertex! This could mean "
+          "that one of the neighbouring cells is empty.");
     }
 
     geometry3d_compute_circumcenter(v0x, v0y, v0z, v1x, v1y, v1z, v2x, v2y, v2z,
@@ -279,8 +282,8 @@ inline static void voronoi_init(struct voronoi *restrict v,
   }
 
   /* Allocate a tetrahedron_vertex_queue */
-  struct tetrahedron_vertex_queue queue;
-  tetrahedron_vertex_queue_init(&queue);
+  struct int3_fifo_queue neighbour_info_q;
+  int3_fifo_queue_init(&neighbour_info_q, 10);
 
   /* The size of the array used to temporarily store the vertices of the voronoi
    * faces in */
@@ -294,7 +297,7 @@ inline static void voronoi_init(struct voronoi *restrict v,
   for (int gen_idx_in_d = 0; gen_idx_in_d < v->number_of_cells;
        gen_idx_in_d++) {
     /* First reset the tetrahedron_vertex_queue */
-    tetrahedron_vertex_queue_reset(&queue);
+    int3_fifo_queue_reset(&neighbour_info_q);
     /* Set the flag of the central generator so that we never pick it as
      * possible neighbour */
     neighbour_flags[gen_idx_in_d] = 1;
@@ -329,20 +332,21 @@ inline static void voronoi_init(struct voronoi *restrict v,
     int other_v_idx_in_t = (gen_idx_in_t + 1) % 4;
     struct tetrahedron *t = &d->tetrahedra[t_idx];
     int other_v_idx_in_d = t->vertices[other_v_idx_in_t];
-    tetrahedron_vertex_queue_push(&queue, t_idx, other_v_idx_in_d,
-                                  other_v_idx_in_t);
+    int3 info = {._0 = t_idx, ._1 = other_v_idx_in_d, ._2 = other_v_idx_in_t};
+    int3_fifo_queue_push(&neighbour_info_q, info);
     /* update flag of the other vertex */
     neighbour_flags[other_v_idx_in_d] = 1;
 
-    while (!tetrahedron_vertex_queue_is_empty(&queue)) {
+    while (!int3_fifo_queue_is_empty(&neighbour_info_q)) {
       /* with each delaunay edge corresponds a voronoi face */
       nface++;
 
       /* Pop the next axis vertex and corresponding tetrahedron from the queue
        */
-      int first_t_idx, axis_idx_in_d, axis_idx_in_t;
-      tetrahedron_vertex_queue_pop(&queue, &first_t_idx, &axis_idx_in_d,
-                                   &axis_idx_in_t);
+      info = int3_fifo_queue_pop(&neighbour_info_q);
+      int first_t_idx = info._0;
+      int axis_idx_in_d = info._1;
+      int axis_idx_in_t = info._2;
       voronoi_assert(axis_idx_in_d >= 0 && (axis_idx_in_d < d->vertex_end ||
                                             axis_idx_in_d >= d->ghost_offset));
       struct tetrahedron *first_t = &d->tetrahedra[first_t_idx];
@@ -356,8 +360,10 @@ inline static void voronoi_init(struct voronoi *restrict v,
 
       if (!neighbour_flags[non_axis_idx_in_d]) {
         /* Add this vertex and tetrahedron to the queue and update its flag */
-        tetrahedron_vertex_queue_push(&queue, first_t_idx, non_axis_idx_in_d,
-                                      non_axis_idx_in_first_t);
+        int3 new_info = {._0 = first_t_idx,
+                         ._1 = non_axis_idx_in_d,
+                         ._2 = non_axis_idx_in_first_t};
+        int3_fifo_queue_push(&neighbour_info_q, new_info);
         neighbour_flags[non_axis_idx_in_d] |= 1;
       }
 
@@ -379,8 +385,10 @@ inline static void voronoi_init(struct voronoi *restrict v,
       /* Get the next non axis vertex and add it to the queue if necessary */
       int next_non_axis_idx_in_d = cur_t->vertices[next_t_idx_in_cur_t];
       if (!neighbour_flags[next_non_axis_idx_in_d]) {
-        tetrahedron_vertex_queue_push(&queue, cur_t_idx, next_non_axis_idx_in_d,
-                                      next_t_idx_in_cur_t);
+        int3 new_info = {._0 = cur_t_idx,
+                         ._1 = next_non_axis_idx_in_d,
+                         ._2 = next_t_idx_in_cur_t};
+        int3_fifo_queue_push(&neighbour_info_q, new_info);
         neighbour_flags[next_non_axis_idx_in_d] |= 1;
       }
 
@@ -444,8 +452,10 @@ inline static void voronoi_init(struct voronoi *restrict v,
         /* Get the next non axis vertex and add it to the queue if necessary */
         next_non_axis_idx_in_d = cur_t->vertices[next_t_idx_in_cur_t];
         if (!neighbour_flags[next_non_axis_idx_in_d]) {
-          tetrahedron_vertex_queue_push(
-              &queue, cur_t_idx, next_non_axis_idx_in_d, next_t_idx_in_cur_t);
+          int3 new_info = {._0 = cur_t_idx,
+                           ._1 = next_non_axis_idx_in_d,
+                           ._2 = next_t_idx_in_cur_t};
+          int3_fifo_queue_push(&neighbour_info_q, new_info);
           neighbour_flags[next_non_axis_idx_in_d] |= 1;
         }
       }
@@ -468,9 +478,9 @@ inline static void voronoi_init(struct voronoi *restrict v,
 #endif
     /* reset flags for all neighbours of this cell */
     neighbour_flags[gen_idx_in_d] = 0;
-    for (int i = 0; i < queue.index_end; i++) {
-      voronoi_assert(queue.vertex_indices[i] < d->vertex_index)
-          neighbour_flags[queue.vertex_indices[i]] = 0;
+    for (int i = 0; i < neighbour_info_q.end; i++) {
+      voronoi_assert(neighbour_info_q.values[i]._1 < d->vertex_index)
+          neighbour_flags[neighbour_info_q.values[i]._1] = 0;
     }
 #ifdef VORONOI_CHECKS
     for (int i = 0; i < d->vertex_index; i++) {
@@ -480,8 +490,8 @@ inline static void voronoi_init(struct voronoi *restrict v,
   }
   free(voronoi_vertices);
   free(neighbour_flags);
+  int3_fifo_queue_destroy(&neighbour_info_q);
   free(face_vertices);
-  tetrahedron_vertex_queue_destroy(&queue);
   voronoi_check_grid(v);
 }
 
@@ -493,7 +503,7 @@ inline static void voronoi_init(struct voronoi *restrict v,
 inline static void voronoi_destroy(struct voronoi *restrict v) {
   free(v->cells);
   for (int i = 0; i < 2; ++i) {
-    for (int j = 0; j < v->pair_index[i]; j ++) {
+    for (int j = 0; j < v->pair_index[i]; j++) {
       voronoi_pair_destroy(&v->pairs[i][j]);
     }
     free(v->pairs[i]);
@@ -514,7 +524,8 @@ inline static void voronoi_destroy(struct voronoi *restrict v) {
  *
  * @param v Voronoi grid.
  * @param sid 0 for pairs entirely in this cell, 1 for pairs between this cell
- * and a neighbouring cell (in SWIFT we use the convention from the description).
+ * and a neighbouring cell (in SWIFT we use the convention from the
+ * description).
  * @param cell Pointer to the cell of the right particle (NULL if the right
  * particle lives in the same cell as the left particle). For SWIFT only.
  * @param left_part_pointer Index of left particle in cell (particle in the
@@ -550,11 +561,13 @@ inline static int voronoi_new_face(struct voronoi *v, int sid,
  * Right now, this only checks the total volume of the cells.
  */
 inline static void voronoi_check_grid(struct voronoi *restrict v) {
+#ifdef VORONOI_CHECKS
   double total_volume = 0.;
   for (int i = 0; i < v->number_of_cells; i++) {
     total_volume += v->cells[i].volume;
   }
   fprintf(stderr, "Total volume: %g\n", total_volume);
+#endif
 }
 
 /**
@@ -598,7 +611,8 @@ inline static void voronoi_print_grid(const struct voronoi *v,
               pair->midpoint[0], pair->midpoint[1], pair->midpoint[2]);
 #ifdef VORONOI_STORE_CONNECTIONS
       for (int j = 0; j < pair->n_vertices; j++) {
-        fprintf(file, "\t(%g, %g, %g)", pair->vertices[3 * j], pair->vertices[3 * j + 1], pair->vertices[3 * j + 2]);
+        fprintf(file, "\t(%g, %g, %g)", pair->vertices[3 * j],
+                pair->vertices[3 * j + 1], pair->vertices[3 * j + 2]);
       }
 #endif
       fprintf(file, "\n");

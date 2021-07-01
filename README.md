@@ -8,9 +8,9 @@
 - [X] Periodic boundary conditions (implemented in dummy way by simpy copying the entire domain to all directions)
 - [X] Vertex tetrahedra links (needed for Voronoi construction)
 - [X] Delaunay search radius
+- [X] Use queue structs
 - [ ] better PBC
 - [ ] Non-exact tests
-- [ ] Add general queue struct (using preprocessor?)
 
 ### TODO: Voronoi3D
 
