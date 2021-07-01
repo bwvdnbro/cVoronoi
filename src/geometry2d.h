@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 /**
- * @file geometry.h
+ * @file geometry2d.h
  *
  * @brief Arbitrary exact and non-exact geometrical tests.
  *
@@ -29,13 +29,13 @@
 #define SWIFT_GEOMETRY_H
 
 #include <gmp.h>
-
+#include <math.h>
 /**
  * @brief Auxiliary variables used by the arbirary exact tests. Since allocating
  * and deallocating these variables poses a significant overhead, they are best
  * reused.
  */
-struct geometry {
+struct geometry2d {
   /*! @brief Arbitrary exact vertex coordinates */
   mpz_t aix, aiy, bix, biy, cix, ciy, dix, diy;
 
@@ -51,24 +51,24 @@ struct geometry {
 };
 
 /**
- * @brief Initialize the geometry object.
+ * @brief Initialize the geometry2d object.
  *
  * This allocates and initialises the auxiliary arbitrary precision variables.
  *
  * @param g Geometry object.
  */
-inline static void geometry_init(struct geometry* restrict g) {
+inline static void geometry2d_init(struct geometry2d* restrict g) {
   mpz_inits(g->aix, g->aiy, g->bix, g->biy, g->cix, g->ciy, g->dix, g->diy,
             g->s1x, g->s1y, g->s2x, g->s2y, g->s3x, g->s3y, g->tmp1, g->tmp2,
             g->result, NULL);
 }
 
 /**
- * @brief Deallocate all memory occupied by the geometry object.
+ * @brief Deallocate all memory occupied by the geometry2d object.
  *
  * @param g Geometry object.
  */
-inline static void geometry_destroy(struct geometry* restrict g) {
+inline static void geometry2d_destroy(struct geometry2d* restrict g) {
   mpz_clears(g->aix, g->aiy, g->bix, g->biy, g->cix, g->ciy, g->dix, g->diy,
              g->s1x, g->s1y, g->s2x, g->s2y, g->s3x, g->s3y, g->tmp1, g->tmp2,
              g->result, NULL);
@@ -97,14 +97,14 @@ inline static void geometry_destroy(struct geometry* restrict g) {
  * @param cx, cy Third point.
  * @return Signed double area of the triangle formed by a, b and c.
  */
-inline static double geometry_orient2d(double ax, double ay, double bx,
+inline static double geometry2d_orient(double ax, double ay, double bx,
                                        double by, double cx, double cy) {
 
   /* the code below stays as close as possible to the implementation of the
      exact test below */
   double s1x, s1y, s2x, s2y, result;
 
-  /* compute the relative positions of a and b w.r.t. c
+  /* compute the relative positions of a and b w.r.t. c */
   s1x = ax - cx;
   s1y = ay - cy;
 
@@ -131,8 +131,8 @@ inline static double geometry_orient2d(double ax, double ay, double bx,
  * @param g Geometry object (containing temporary variables that will be used).
  * @param ax, ay, bx, by, cx, cy Integer coordinates of the three points.
  */
-inline static int geometry_orient2d_exact(
-    struct geometry* restrict g, unsigned long int ax, unsigned long int ay,
+inline static int geometry2d_orient_exact(
+    struct geometry2d* restrict g, unsigned long int ax, unsigned long int ay,
     unsigned long int bx, unsigned long int by, unsigned long int cx,
     unsigned long int cy) {
 
@@ -167,7 +167,7 @@ inline static int geometry_orient2d_exact(
  *
  * This test determines whether the point d is inside the circle through the
  * points a, b and c. Assuming a, b and c are positively oriented (positive
- * return value of geometry_orient2d()), a negative return value means d is
+ * return value of geometry2d_orient()), a negative return value means d is
  * outside the circle and a positive value it is inside. A return value of 0
  * means d lies on the circle.
  *
@@ -189,9 +189,9 @@ inline static int geometry_orient2d_exact(
  * @param cx, cy Third point.
  * @param dx, dy Fourth point.
  */
-inline static double geometry_in_circle(double ax, double ay, double bx,
-                                        double by, double cx, double cy,
-                                        double dx, double dy) {
+inline static double geometry2d_in_sphere(double ax, double ay, double bx,
+                                          double by, double cx, double cy,
+                                          double dx, double dy) {
 
   /* the code below stays as close as possible to the implementation of the
      exact test below */
@@ -233,7 +233,7 @@ inline static double geometry_in_circle(double ax, double ay, double bx,
 }
 
 /**
- * @brief Arbitrary exact alternative for geometry_in_circle().
+ * @brief Arbitrary exact alternative for geometry2d_in_sphere().
  *
  * This function calculates exactly the same thing as the non-exact version, but
  * does so in an integer coordinate basis, using arbitrarily large integers.
@@ -244,8 +244,8 @@ inline static double geometry_in_circle(double ax, double ay, double bx,
  * @param g Geometry object (containing temporary variables that will be used).
  * @param ax, ay, bx, by, cx, cy, dx, dy Integer coordinates of the four points.
  */
-inline static int geometry_in_circle_exact(
-    struct geometry* restrict g, unsigned long int ax, unsigned long int ay,
+inline static int geometry2d_in_sphere_exact(
+    struct geometry2d* restrict g, unsigned long int ax, unsigned long int ay,
     unsigned long int bx, unsigned long int by, unsigned long int cx,
     unsigned long int cy, unsigned long int dx, unsigned long int dy) {
 
@@ -296,6 +296,75 @@ inline static int geometry_in_circle_exact(
 
   /* evaluate the sign of the result and return */
   return mpz_sgn(g->result);
+}
+
+/**
+ * @brief Compute the coordinates of the circumcenter of the triangle
+ * (v0, v1, v2).
+ *
+ * @param v0x, v0y, v1x, v1y, v2x, v2y Coordinates of the corners of the
+ * triangle.
+ * @param circumcenter (Returned)
+ */
+static inline void geometry2d_compute_circumcenter(double v0x, double v0y,
+                                                   double v1x, double v1y,
+                                                   double v2x, double v2y,
+                                                   double* circumcenter) {
+  double ax = v1x - v0x;
+  double ay = v1y - v0y;
+  double bx = v2x - v0x;
+  double by = v2y - v0y;
+
+  double D = 2. * (ax * by - ay * bx);
+  double a2 = ax * ax + ay * ay;
+  double b2 = bx * bx + by * by;
+  circumcenter[0] = v0x + (by * a2 - ay * b2) / D;
+  circumcenter[1] = v0y + (ax * b2 - bx * a2) / D;
+}
+
+/**
+ * @brief Compute the volume and centroid of the triangle through the given 3
+ * points.
+ *
+ * @param ax, ay, bx, by, cx, cy Point coordinates.
+ * @param result Centroid of the triangle.
+ * @return Volume of the triangle.
+ */
+static inline double geometry2d_compute_centroid_volume_triangle(
+    double ax, double ay, double bx, double by, double cx, double cy,
+    double* result) {
+
+  result[0] = (ax + bx + cx) / 3.;
+  result[1] = (ay + by + cy) / 3.;
+
+  double s10x = bx - ax;
+  double s10y = by - ay;
+
+  double s20x = cx - ax;
+  double s20y = cy - ay;
+
+  return 0.5 * fabs(s10x * s20y - s20x * s10y);
+}
+
+/**
+ * @brief Compute the midpoint and surface area of the face with the given
+ * vertex_indices.
+ *
+ * @param ax, ay, bx, by Face vertex_indices.
+ * @param result Midpoint of the face.
+ * @return Surface area of the face.
+ */
+static inline double geometry2d_compute_midpoint_area_face(double ax, double ay,
+                                                         double bx, double by,
+                                                         double* result) {
+
+  result[0] = 0.5 * (ax + bx);
+  result[1] = 0.5 * (ay + by);
+
+  double sx = bx - ax;
+  double sy = by - ay;
+
+  return sqrt(sx * sx + sy * sy);
 }
 
 #endif /* SWIFT_GEOMETRY_H */
