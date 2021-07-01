@@ -22,3 +22,5 @@ target_link_libraries(testGeometry3D gmp m)
 
 add_executable(testDelaunay test/test_delaunay.c)
 target_link_libraries(testDelaunay gmp m)
+
+add_executable(testQueues test/test_queues.c)

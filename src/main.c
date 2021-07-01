@@ -126,21 +126,6 @@ static inline void update_paths(int loop, double *vertices) {
  * @brief Main program entry point.
  */
 int main() {
-  struct int_lifo_queue q1;
-  int_lifo_queue_init(&q1, 1);
-  int_lifo_queue_push(&q1, 2);
-  int_lifo_queue_push(&q1, 3);
-  int_lifo_queue_push(&q1, 3);
-  printf("%i\n", int_lifo_queue_is_empty(&q1));
-  int_lifo_queue_destroy(&q1);
-
-  struct int3_fifo_queue q3;
-  int3_fifo_queue_init(&q3, 10);
-  int3 t = {._0 = 1, ._1 = 2, ._2 = 100};
-  int3_fifo_queue_push(&q3, t);
-  int3 v = int3_fifo_queue_pop(&q3);
-  int3_fifo_queue_destroy(&q3);
-
   /* seed the random generator with the most random seed ever */
   srand(42);
   int count[3] = {3, 3, 3};
