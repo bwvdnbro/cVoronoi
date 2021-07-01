@@ -22,9 +22,6 @@ inline static void delaunay_add_vertex(struct delaunay* restrict d, int v);
 inline static int delaunay_new_tetrahedron(struct delaunay* restrict d);
 inline static void delaunay_init_tetrahedron(struct delaunay* d, int t, int v0,
                                              int v1, int v2, int v3);
-inline static int delaunay_free_indices_queue_pop(struct delaunay* restrict d);
-inline static void delaunay_free_index_enqueue(struct delaunay* restrict d,
-                                               int idx);
 inline static int get_next_tetrahedron_to_check(struct delaunay* restrict d);
 inline static void delaunay_append_tetrahedron_containing_vertex(
     struct delaunay* d, int t);
@@ -136,17 +133,7 @@ struct delaunay {
    * tetrahedra can be split into 2 new ones. This leaves a free spot in the
    * array.
    */
-  int* free_indices_queue;
-
-  /*! @brief Next available index in de free_indices_queue. Determines both the
-   * actual size of the free_indices_queue as the first element that will be
-   * popped from the free_indices_queue. */
-  int free_indices_q_index;
-
-  /*! @brief Current size of the free_indices_queue in memory. If
-   * free_indices_q_size matches free_indices_q_index, the memory buffer
-   * is full and needs to be expanded. */
-  int free_indices_q_size;
+  struct int_lifo_queue free_tetrahedron_indices;
 
   /*! @brief Array of tetrahedra containing the current vertex */
   int* tetrahedra_containing_vertex;
@@ -229,9 +216,7 @@ inline static void delaunay_init(struct delaunay* restrict d,
   int_lifo_queue_init(&d->tetrahedra_to_check, 10);
 
   /* allocate memory for the free_indices_queue */
-  d->free_indices_queue = (int*)malloc(10 * sizeof(int));
-  d->free_indices_q_index = 0;
-  d->free_indices_q_size = 10;
+  int_lifo_queue_init(&d->free_tetrahedron_indices, 10);
 
   /* allocate the tetrahedron_vertex_queue used by the get_radius_function */
   int3_fifo_queue_init(&d->get_radius_queue, 10);
@@ -327,7 +312,7 @@ inline static void delaunay_destroy(struct delaunay* restrict d) {
   free(d->search_radii);
   free(d->tetrahedra);
   int_lifo_queue_destroy(&d->tetrahedra_to_check);
-  free(d->free_indices_queue);
+  int_lifo_queue_destroy(&d->free_tetrahedron_indices);
   free(d->tetrahedra_containing_vertex);
   int3_fifo_queue_destroy(&d->get_radius_queue);
   free(d->get_radius_flags);
@@ -336,9 +321,8 @@ inline static void delaunay_destroy(struct delaunay* restrict d) {
 
 inline static int delaunay_new_tetrahedron(struct delaunay* restrict d) {
   /* check whether there is a free spot somewhere in the array */
-  int index = delaunay_free_indices_queue_pop(d);
-  if (index >= 0) {
-    return index;
+  if (!int_lifo_queue_is_empty(&d->free_tetrahedron_indices)) {
+    return int_lifo_queue_pop(&d->free_tetrahedron_indices);
   }
   /* Else: check that we still have space for tetrahedrons available */
   if (d->tetrahedron_index == d->tetrahedron_size) {
@@ -1566,7 +1550,7 @@ inline static void delaunay_check_tetrahedra(struct delaunay* d, int v) {
   }
   /* Enqueue the newly freed tetrahedra indices */
   for (int i = 0; i < n_freed; i++) {
-    delaunay_free_index_enqueue(d, freed[i]);
+    int_lifo_queue_push(&d->free_tetrahedron_indices, freed[i]);
   }
   free(freed);
 }
@@ -1906,48 +1890,6 @@ inline static double delaunay_get_search_radius(struct delaunay* restrict d,
 #endif
 
   return search_radius;
-}
-
-/**
- * @brief Add the given index to the queue of free indices in the tetrahedra
- * array.
- *
- * @param d Delaunay tessellation.
- * @param idx New free index.
- */
-inline static void delaunay_free_index_enqueue(struct delaunay* restrict d,
-                                               int idx) {
-  /* make sure there is sufficient space in the queue */
-  if (d->free_indices_q_index == d->free_indices_q_size) {
-    /* there isn't: increase the size of the queue with a factor 2. */
-    d->free_indices_q_size <<= 1;
-    d->free_indices_queue = (int*)realloc(d->free_indices_queue,
-                                          d->free_indices_q_size * sizeof(int));
-  }
-  delaunay_log("Enqueuing free index %i", idx);
-  /* add the free index to the queue and advance the queue index */
-  d->free_indices_queue[d->free_indices_q_index] = idx;
-  ++d->free_indices_q_index;
-}
-
-/**
- * @brief Pop a free index in the tetrahedra array from the end of the queue.
- *
- * If no more indices are queued, this function returns a negative value.
- *
- * Note that the returned index is effectively removed from the queue
- * and will be overwritten by subsequent calls to delaunay_free_index_enqueue().
- *
- * @param d Delaunay tessellation.
- * @return Next free index, or -1 if the queue is empty.
- */
-inline static int delaunay_free_indices_queue_pop(struct delaunay* restrict d) {
-  if (d->free_indices_q_index > 0) {
-    --d->free_indices_q_index;
-    return d->free_indices_queue[d->free_indices_q_index];
-  } else {
-    return -1;
-  }
 }
 
 /**
