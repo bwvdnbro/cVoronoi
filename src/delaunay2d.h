@@ -18,9 +18,9 @@
  ******************************************************************************/
 
 /**
- * @file delaunay.h
+ * @file delaunay2d.h
  *
- * @brief Delaunay tessellation.
+ * @brief 2D Delaunay tessellation.
  *
  * @author Bert Vandenbroucke (bert.vandenbroucke@ugent.be)
  */

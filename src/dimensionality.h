@@ -1,6 +1,11 @@
 //
 // Created by yuyttenh on 08/06/2021.
 //
+/**
+ * @file dimensionality.h
+ *
+ * @brief Sets the dimensionality of the code
+ */
 
 #ifndef CVORONOI_DIMENSIONALITY_H
 

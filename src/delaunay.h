@@ -2,6 +2,13 @@
 // Created by yuyttenh on 08/06/2021.
 //
 
+/**
+ * @file delaunay.h
+ *
+ * @brief Includes the correct Delaunay implementation based on the
+ * dimensionality.
+ */
+
 #ifndef CVORONOI_DELAUNAY_H
 #define CVORONOI_DELAUNAY_H
 

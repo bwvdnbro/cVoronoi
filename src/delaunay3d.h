@@ -2,6 +2,12 @@
 // Created by yuyttenh on 08/06/2021.
 //
 
+/**
+ * @file delaunay3d.h
+ *
+ * @brief 3D Delaunay struct and construction algorithm.
+ */
+
 #ifndef CVORONOI_DELAUNAY3D_H
 #define CVORONOI_DELAUNAY3D_H
 

@@ -1,6 +1,13 @@
 //
 // Created by yuyttenh on 30/06/2021.
 //
+
+/**
+ * @file queues.h
+ *
+ * @brief Generates code for a int LIFO queue and an int3 FIFO queue
+ */
+
 #include "tuples.h"
 
 #ifndef CVORONOI_QUEUES_H

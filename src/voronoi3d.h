@@ -2,6 +2,12 @@
 // Created by yuyttenh on 08/06/2021.
 //
 
+/**
+ * @file voronoi3d.h
+ *
+ * @brief 3D Voronoi grid and functions.
+ */
+
 #ifndef CVORONOI_VORONOI3D_H
 #define CVORONOI_VORONOI3D_H
 

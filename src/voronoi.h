@@ -2,6 +2,13 @@
 // Created by yuyttenh on 08/06/2021.
 //
 
+/**
+ * @file voronoi.h
+ *
+ * @brief includes the correct Voronoi implementation based on the
+ * dimensionality.
+ */
+
 #ifndef CVORONOI_VORONOI_H
 
 #include <stdlib.h>

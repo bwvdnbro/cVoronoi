@@ -2,6 +2,13 @@
 // Created by yuyttenh on 30/06/2021.
 //
 
+/**
+ * @file generic_lifo_queue.h
+ *
+ * @brief Generates code for a LIFO queue with values of the type QUEUE_TYPE,
+ * which has to be defined when importing this file.
+ */
+
 /* QUEUE_TYPE and optionally QUEUE_NAME must be defined before importing this
  * header! */
 
@@ -30,6 +37,9 @@
 #define _POP(f) PASTE(f, pop)
 #define QUEUE_POP _POP(QUEUE_NAME)
 
+/**@brief
+ * Generic definition of a FIFO queue
+ */
 struct QUEUE_NAME {
   QUEUE_TYPE *values;
   int size;

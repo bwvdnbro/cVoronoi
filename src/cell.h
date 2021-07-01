@@ -2,6 +2,16 @@
 // Created by yuyttenh on 07/06/2021.
 //
 
+/**
+ * @file cell.h
+ *
+ * @brief Simple cell struct which stores a Delaunay tesselation and the
+ * corresponding Voronoi mesh.
+ *
+ * Emulates some of the basic functionality of a SWIFT cell. Can relax the
+ * Voronoi mesh.
+ */
+
 #ifndef CVORONOI_CELL_H
 #define CVORONOI_CELL_H
 

@@ -2,6 +2,13 @@
 // Created by yuyttenh on 09/06/2021.
 //
 
+/**
+ * @file geometry.h
+ *
+ * @brief Includes the correct geometry implementation based on the
+ * dimensionality.
+ */
+
 #ifndef CVORONOI_GEOMETRY_H
 #define CVORONOI_GEOMETRY_H
 

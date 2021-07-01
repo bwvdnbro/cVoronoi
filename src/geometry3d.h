@@ -2,6 +2,12 @@
 // Created by yuyttenh on 09/06/2021.
 //
 
+/**
+ * @file geometry3d.h
+ *
+ * @brief Arbitrary exact and non-exact geometrical tests.
+ */
+
 #ifndef CVORONOI_GEOMETRY3D_H
 #define CVORONOI_GEOMETRY3D_H
 

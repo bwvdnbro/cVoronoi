@@ -2,6 +2,12 @@
 // Created by yuyttenh on 09/06/2021.
 //
 
+/**
+ * @file tetrahedron.h
+ *
+ * @brief Tetrahedron struct and functionality.
+ */
+
 #ifndef CVORONOI_TETRAHEDRON_H
 #define CVORONOI_TETRAHEDRON_H
 
