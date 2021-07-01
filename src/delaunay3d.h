@@ -23,8 +23,6 @@ inline static int delaunay_new_tetrahedron(struct delaunay* restrict d);
 inline static void delaunay_init_tetrahedron(struct delaunay* d, int t, int v0,
                                              int v1, int v2, int v3);
 inline static int get_next_tetrahedron_to_check(struct delaunay* restrict d);
-inline static void delaunay_append_tetrahedron_containing_vertex(
-    struct delaunay* d, int t);
 inline static int delaunay_find_tetrahedra_containing_vertex(struct delaunay* d,
                                                              int v);
 inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t);
@@ -122,6 +120,13 @@ struct delaunay {
    * needs to be expanded. */
   int tetrahedron_size;
 
+  /*! @brief Index of the last tetrahedron that was created or modified. Used as
+   * initial guess for the tetrahedron that contains the next vertex that will
+   * be added. If vertex_indices are added in some sensible order (e.g. in
+   * Peano-Hilbert curve order) then this will greatly speed up the algorithm.
+   */
+  int last_tetrahedron;
+
   /*! @brief Lifo queue of tetrahedra that need checking during the incremental
    *  construction algorithm. After a new vertex has been added, all new
    *  tetrahedra are added to this queue and are tested to see if the
@@ -136,23 +141,7 @@ struct delaunay {
   struct int_lifo_queue free_tetrahedron_indices;
 
   /*! @brief Array of tetrahedra containing the current vertex */
-  int* tetrahedra_containing_vertex;
-
-  /*! @brief Next index in the array of tetrahedra containing the current
-   * vertex. This is also the number of tetrahedra containing the current
-   * vertex. */
-  int tetrahedra_containing_vertex_index;
-
-  /*! @brief Size of the array of tetrahedra containing the current vertex in
-   * memory. */
-  int tetrahedra_containing_vertex_size;
-
-  /*! @brief Index of the last tetrahedron that was accessed. Used as initial
-   *  guess for the tetrahedron that contains the next vertex that will be
-   * added. If vertex_indices are added in some sensible order (e.g. in
-   * Peano-Hilbert curve order) then this will greatly speed up the algorithm.
-   */
-  int last_tetrahedron;
+  struct int_lifo_queue tetrahedra_containing_vertex;
 
   struct int3_fifo_queue get_radius_queue;
 
@@ -184,7 +173,7 @@ struct delaunay {
 inline static void delaunay_init(struct delaunay* restrict d,
                                  const struct hydro_space* restrict hs,
                                  int vertex_size, int tetrahedron_size) {
-  /* allocate memory for the vertex arrays */
+  /* allocate memory for all the arrays and queues */
   d->vertices = (double*)malloc(vertex_size * 3 * sizeof(double));
 #ifdef DELAUNAY_NONEXACT
   d->rescaled_vertices = (double*)malloc(vertex_size * 3 * sizeof(double));
@@ -194,39 +183,27 @@ inline static void delaunay_init(struct delaunay* restrict d,
   d->vertex_tetrahedron_links = (int*)malloc(vertex_size * sizeof(int));
   d->vertex_tetrahedron_index = (int*)malloc(vertex_size * sizeof(int));
   d->search_radii = (double*)malloc(vertex_size * sizeof(double));
-  d->vertex_size = vertex_size;
-  /* set vertex start and end (indicating where the local vertex_indices start
-   * and end)*/
-  d->vertex_start = 0;
-  d->vertex_end = vertex_size;
-  d->ghost_offset = 0;
-  /* we add the dummy vertex_indices behind the local vertex_indices and before
-   * the ghost vertex_indices (see below) */
-  d->vertex_index = vertex_size;
-
-  /* allocate memory for the tetrahedra array */
   d->tetrahedra = (struct tetrahedron*)malloc(tetrahedron_size *
                                               sizeof(struct tetrahedron));
-  d->tetrahedron_index = 0;
-  d->tetrahedron_size = tetrahedron_size;
-
-  /* allocate memory for the tetrahedra_to_check queue (note that the size of 10
-   * was chosen arbitrarily, and a proper value should be chosen based on
-   * performance measurements) */
+  int_lifo_queue_init(&d->tetrahedra_containing_vertex, 10);
   int_lifo_queue_init(&d->tetrahedra_to_check, 10);
-
-  /* allocate memory for the free_indices_queue */
   int_lifo_queue_init(&d->free_tetrahedron_indices, 10);
-
-  /* allocate the tetrahedron_vertex_queue used by the get_radius_function */
   int3_fifo_queue_init(&d->get_radius_queue, 10);
   d->get_radius_flags = (int*)malloc(vertex_size * sizeof(int));
 
-  /* allocate memory for the array of tetrahedra containing the current vertex
-   * Initial size is 10, may grow a lot for degenerate cases... */
-  d->tetrahedra_containing_vertex = (int*)malloc(10 * sizeof(int));
-  d->tetrahedra_containing_vertex_index = 0;
-  d->tetrahedra_containing_vertex_size = 10;
+  /* Initialise the vertex and tetrahedra array indices and sizes. */
+  d->vertex_size = vertex_size;
+  d->vertex_index = vertex_size;
+
+  d->tetrahedron_index = 0;
+  d->tetrahedron_size = tetrahedron_size;
+
+  /* Initialise the indices indicating where the local vertices start and end.*/
+  d->vertex_start = 0;
+  d->vertex_end = vertex_size;
+  /* The ghost offset will be set in the consolidate method. As long as this is
+   * 0, the voronoi construction will not work. */
+  d->ghost_offset = 0;
 
   /* determine the size of a box large enough to accommodate the entire
    * simulation volume and all possible ghost vertex_indices required to deal
@@ -286,15 +263,13 @@ inline static void delaunay_init(struct delaunay* restrict d,
   tetrahedron_init(&d->tetrahedra[dummy3], v0, v2, v1, -1);
   delaunay_init_tetrahedron(d, first_tetrahedron, v0, v1, v2, v3);
 
-  /* Setup neighour relations */
+  /* Setup neighbour relations */
   tetrahedron_swap_neighbour(&d->tetrahedra[dummy0], 3, first_tetrahedron, 0);
   tetrahedron_swap_neighbour(&d->tetrahedra[dummy1], 3, first_tetrahedron, 1);
   tetrahedron_swap_neighbour(&d->tetrahedra[dummy2], 3, first_tetrahedron, 2);
   tetrahedron_swap_neighbour(&d->tetrahedra[dummy3], 3, first_tetrahedron, 3);
   tetrahedron_swap_neighbours(&d->tetrahedra[first_tetrahedron], dummy0, dummy1,
                               dummy2, dummy3, 3, 3, 3, 3);
-
-  /* TODO: Setup vertex-tetrahedra links... */
 
   /* Perform sanity checks */
   delaunay_check_tessellation(d);
@@ -313,7 +288,7 @@ inline static void delaunay_destroy(struct delaunay* restrict d) {
   free(d->tetrahedra);
   int_lifo_queue_destroy(&d->tetrahedra_to_check);
   int_lifo_queue_destroy(&d->free_tetrahedron_indices);
-  free(d->tetrahedra_containing_vertex);
+  int_lifo_queue_destroy(&d->tetrahedra_containing_vertex);
   int3_fifo_queue_destroy(&d->get_radius_queue);
   free(d->get_radius_flags);
   geometry3d_destroy(&d->geometry);
@@ -522,20 +497,20 @@ inline static void delaunay_add_vertex(struct delaunay* restrict d, int v) {
      * tetrahedra */
     delaunay_log("Vertex %i lies fully inside tetrahedron %i", v,
                  d->tetrahedra_containing_vertex[0]);
-    delaunay_one_to_four_flip(d, v, d->tetrahedra_containing_vertex[0]);
+    delaunay_one_to_four_flip(d, v, d->tetrahedra_containing_vertex.values[0]);
   } else if (number_of_tetrahedra == 2) {
     /* point on face: replace the 2 tetrahedra with 6 new ones */
     delaunay_log("Vertex %i on the face between tetrahedra %i and %i", v,
                  d->tetrahedra_containing_vertex[0],
                  d->tetrahedra_containing_vertex[1]);
-    delaunay_two_to_six_flip(d, v, d->tetrahedra_containing_vertex);
+    delaunay_two_to_six_flip(d, v, d->tetrahedra_containing_vertex.values);
   } else if (number_of_tetrahedra > 2) {
     /* point on edge: replace the N tetrahedra with 2N new ones */
     delaunay_log(
         "Vertex %i lies on the edge shared by tetrahedra %i, %i and %i", v,
         d->tetrahedra_containing_vertex[0], d->tetrahedra_containing_vertex[1],
         d->tetrahedra_containing_vertex[number_of_tetrahedra - 1]);
-    delaunay_n_to_2n_flip(d, v, d->tetrahedra_containing_vertex,
+    delaunay_n_to_2n_flip(d, v, d->tetrahedra_containing_vertex.values,
                           number_of_tetrahedra);
   } else {
     fprintf(stderr, "Unknown case of number of tetrahedra: %i!\n",
@@ -563,45 +538,18 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
     struct delaunay* restrict d, const int v) {
   /* Before we do anything: reset the index in the array of tetrahedra
    * containing the current vertex */
-  d->tetrahedra_containing_vertex_index = 0;
+  int_lifo_queue_reset(&d->tetrahedra_containing_vertex);
 
   /* Get the last tetrahedron index */
   int tetrahedron_idx = d->last_tetrahedron;
-  /* Get the coordinates of the test vertex */
-#ifdef DELAUNAY_NONEXACT
-  const double ex = d->vertices[3 * v];
-  const double ey = d->vertices[3 * v + 1];
-  const double ez = d->vertices[3 * v + 2];
-#endif
-  const unsigned long eix = d->integer_vertices[3 * v];
-  const unsigned long eiy = d->integer_vertices[3 * v + 1];
-  const unsigned long eiz = d->integer_vertices[3 * v + 2];
 
-  while (d->tetrahedra_containing_vertex_index == 0) {
+  while (int_lifo_queue_is_empty(&d->tetrahedra_containing_vertex)) {
     const struct tetrahedron* tetrahedron = &d->tetrahedra[tetrahedron_idx];
     const int v0 = tetrahedron->vertices[0];
     const int v1 = tetrahedron->vertices[1];
     const int v2 = tetrahedron->vertices[2];
     const int v3 = tetrahedron->vertices[3];
     /* Get the coordinates of the vertex_indices of the tetrahedron */
-#ifdef DELAUNAY_NONEXACT
-    const double ax = d->vertices[3 * v0];
-    const double ay = d->vertices[3 * v0 + 1];
-    const double az = d->vertices[3 * v0 + 2];
-
-    const double bx = d->vertices[3 * v1];
-    const double by = d->vertices[3 * v1 + 1];
-    const double bz = d->vertices[3 * v1 + 2];
-
-    const double cx = d->vertices[3 * v2];
-    const double cy = d->vertices[3 * v2 + 1];
-    const double cz = d->vertices[3 * v2 + 2];
-
-    const double dx = d->vertices[3 * v3];
-    const double dy = d->vertices[3 * v3 + 1];
-    const double dz = d->vertices[3 * v3 + 2];
-#endif
-    const unsigned long aix = d->integer_vertices[3 * v0];
     const unsigned long aiy = d->integer_vertices[3 * v0 + 1];
     const unsigned long aiz = d->integer_vertices[3 * v0 + 2];
 
@@ -617,6 +565,16 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
     const unsigned long diy = d->integer_vertices[3 * v3 + 1];
     const unsigned long diz = d->integer_vertices[3 * v3 + 2];
 
+    /* Get the coordinates of the test vertex */
+    const unsigned long eix = d->integer_vertices[3 * v];
+    const unsigned long eiy = d->integer_vertices[3 * v + 1];
+    const unsigned long eiz = d->integer_vertices[3 * v + 2];
+
+#ifdef DELAUNAY_NONEXACT
+    // TODO get non-exact coordinates
+#endif
+
+    const unsigned long aix = d->integer_vertices[3 * v0];
 #ifdef DELAUNAY_CHECKS
     /* made sure the tetrahedron is correctly oriented */
     if (geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz, cix,
@@ -659,32 +617,37 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
       /* v outside face opposite of v0 */
       tetrahedron_idx = tetrahedron->neighbours[0];
       continue;
-    } else {
-      /* Point inside tetrahedron, check for degenerate cases */
-      delaunay_append_tetrahedron_containing_vertex(d, tetrahedron_idx);
-      if (test_abce == 0) {
-        non_axis_v_idx[d->tetrahedra_containing_vertex_index - 1] = 3;
-        delaunay_append_tetrahedron_containing_vertex(
-            d, tetrahedron->neighbours[3]);
-      }
-      if (test_adbe == 0) {
-        non_axis_v_idx[d->tetrahedra_containing_vertex_index - 1] = 2;
-        delaunay_append_tetrahedron_containing_vertex(
-            d, tetrahedron->neighbours[2]);
-      }
-      if (test_acde == 0) {
-        non_axis_v_idx[d->tetrahedra_containing_vertex_index - 1] = 1;
-        delaunay_append_tetrahedron_containing_vertex(
-            d, tetrahedron->neighbours[1]);
-      }
-      if (test_bdce == 0) {
-        non_axis_v_idx[d->tetrahedra_containing_vertex_index - 1] = 0;
-        delaunay_append_tetrahedron_containing_vertex(
-            d, tetrahedron->neighbours[0]);
-      }
     }
 
-    if (d->tetrahedra_containing_vertex_index > 3) {
+    /* Point inside tetrahedron, check for degenerate cases */
+    int n_zero_tests = 0;
+    int_lifo_queue_push(&d->tetrahedra_containing_vertex, tetrahedron_idx);
+    if (test_abce == 0) {
+      non_axis_v_idx[n_zero_tests] = 3;
+      int_lifo_queue_push(&d->tetrahedra_containing_vertex,
+                          tetrahedron->neighbours[3]);
+      n_zero_tests++;
+    }
+    if (test_adbe == 0) {
+      non_axis_v_idx[n_zero_tests] = 2;
+      int_lifo_queue_push(&d->tetrahedra_containing_vertex,
+                          tetrahedron->neighbours[2]);
+      n_zero_tests++;
+    }
+    if (test_acde == 0) {
+      non_axis_v_idx[n_zero_tests] = 1;
+      int_lifo_queue_push(&d->tetrahedra_containing_vertex,
+                          tetrahedron->neighbours[1]);
+      n_zero_tests++;
+    }
+    if (test_bdce == 0) {
+      non_axis_v_idx[n_zero_tests] = 0;
+      int_lifo_queue_push(&d->tetrahedra_containing_vertex,
+                          tetrahedron->neighbours[0]);
+      n_zero_tests++;
+    }
+
+    if (n_zero_tests > 2) {
       /* Impossible case, the vertex cannot simultaneously lie in this
        * tetrahedron and 3 or more of its direct neighbours */
       fprintf(stderr,
@@ -693,7 +656,7 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
               v);
       abort();
     }
-    if (d->tetrahedra_containing_vertex_index > 2) {
+    if (n_zero_tests > 1) {
       /* Vertex on edge of tetrahedron. This edge can be shared by any number of
        * tetrahedra, of which we already know three. Find the other ones by
        * rotating around this edge. */
@@ -708,21 +671,23 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
           axis_idx0 != axis_idx1 && axis_idx0 != non_axis_idx0 &&
           axis_idx0 != non_axis_idx1 && axis_idx1 != non_axis_idx0 &&
           axis_idx1 != non_axis_idx1 && non_axis_idx0 != non_axis_idx1);
+
       /* a0 and a1 are the vertex_indices shared by all tetrahedra */
       const int a0 = tetrahedron->vertices[axis_idx0];
       const int a1 = tetrahedron->vertices[axis_idx1];
+
       /* We now walk around the axis and add all tetrahedra to the list of
        * tetrahedra containing v. */
-      const int last_t = d->tetrahedra_containing_vertex[1];
-      int next_t = d->tetrahedra_containing_vertex[2];
+      const int last_t = d->tetrahedra_containing_vertex.values[1];
+      int next_t = d->tetrahedra_containing_vertex.values[2];
       int next_vertex = tetrahedron->index_in_neighbour[non_axis_idx1];
-      /* We are going to add d->tetrahedra_containing_vertex[2] and
-       * d->tetrahedra_containing_vertex[1] back to the array of tetrahedra
+
+      /* We are going to add next_t and last_t back to the array of tetrahedra
        * containing v, but now with all other tetrahedra that also share the
-       * edge in between, so make sure they are not added twice. */
-      d->tetrahedra_containing_vertex_index -= 2;
+       * edge in between, so first remove them from the queue. */
+      d->tetrahedra_containing_vertex.index -= 2;
       while (next_t != last_t) {
-        delaunay_append_tetrahedron_containing_vertex(d, next_t);
+        int_lifo_queue_push(&d->tetrahedra_containing_vertex, next_t);
         next_vertex = (next_vertex + 1) % 4;
         if (d->tetrahedra[next_t].vertices[next_vertex] == a0 ||
             d->tetrahedra[next_t].vertices[next_vertex] == a1) {
@@ -740,10 +705,10 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
         next_t = d->tetrahedra[next_t].neighbours[cur_vertex];
       }
       /* Don't forget to add back last_t (which was overwritten) */
-      delaunay_append_tetrahedron_containing_vertex(d, last_t);
+      int_lifo_queue_push(&d->tetrahedra_containing_vertex, last_t);
     }
   }
-  return d->tetrahedra_containing_vertex_index;
+  return d->tetrahedra_containing_vertex.index;
 }
 
 /**
@@ -1559,12 +1524,10 @@ inline static void delaunay_check_tetrahedra(struct delaunay* d, int v) {
  * @brief Check if the given tetrahedron satisfies the empty circumsphere
  * criterion that marks it as a Delaunay tetrahedron.
  *
- * Per convention, we assume this check was triggered by inserting the final
- * vertex of this tetrahedron, so only one check is required.
- * -> TODO does this work?
  * If this check fails, this function also performs the necessary flips. All
  * new tetrahedra created by this function are also pushed to the queue for
  * checking.
+ *
  * @param d Delaunay tessellation
  * @param t The tetrahedron to check.
  * @param v The new vertex that might cause invalidation of the tetrahedron.
@@ -1912,26 +1875,6 @@ inline static int get_next_tetrahedron_to_check(struct delaunay* restrict d) {
     active = d->tetrahedra[t].active;
   }
   return active ? t : -1;
-}
-
-/**
- * @brief Append a tetrahedron containing the current vertex to the array.
- * @param d Delaunay tessellation
- * @param t The tetrahedron containing the current vertex.
- */
-inline static void delaunay_append_tetrahedron_containing_vertex(
-    struct delaunay* d, const int t) {
-  /* Enough space? */
-  if (d->tetrahedra_containing_vertex_index ==
-      d->tetrahedra_containing_vertex_size) {
-    d->tetrahedra_containing_vertex_size <<= 1;
-    d->tetrahedra_containing_vertex =
-        (int*)realloc(d->tetrahedra_containing_vertex,
-                      d->tetrahedra_containing_vertex_size * sizeof(int));
-  }
-  /* Append and increase index for next tetrahedron */
-  d->tetrahedra_containing_vertex[d->tetrahedra_containing_vertex_index] = t;
-  d->tetrahedra_containing_vertex_index++;
 }
 
 /**
