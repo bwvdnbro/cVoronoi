@@ -486,7 +486,7 @@ inline static void voronoi_init(struct voronoi *restrict v,
     /* reset flags for all neighbours of this cell */
     neighbour_flags[gen_idx_in_d] = 0;
     for (int i = 0; i < neighbour_info_q.end; i++) {
-      voronoi_assert(neighbour_info_q.values[i]._1 < d->vertex_index)
+      voronoi_assert(neighbour_info_q.values[i]._1 < d->vertex_index);
           neighbour_flags[neighbour_info_q.values[i]._1] = 0;
     }
 #ifdef VORONOI_CHECKS

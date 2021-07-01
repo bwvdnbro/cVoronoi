@@ -34,6 +34,9 @@
 /*! @brief Activate runtime assertions. */
 
 #define VORONOI_DO_ASSERTIONS
+
+#define VORONOI_CHECKS
+
 /**
  *@brief Evaluate the given condition and abort if it evaluates to true.
  *
@@ -41,17 +44,15 @@
  * This macro is only defined when VORONOI_DO_ASSERTIONS is active.
  */
 #ifdef VORONOI_DO_ASSERTIONS
-#define voronoi_assert(condition)                                    \
+#define voronoi_assert(condition)                                     \
   if (!(condition)) {                                                 \
     fprintf(stderr, "%s:%s():%i: Condition failed: " #condition "\n", \
             __FILE__, __FUNCTION__, __LINE__);                        \
     abort();                                                          \
   }
 #else
-#define delaunay_assert(condition)
+#define voronoi_assert(condition)
 #endif
-
-#define VORONOI_CHECKS
 
 #if defined(DIMENSIONALITY_2D)
 #include "voronoi2d.h"
