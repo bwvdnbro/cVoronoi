@@ -196,7 +196,6 @@ inline static void voronoi_init(struct voronoi *restrict v,
     int v1 = t->vertices[1];
     int v2 = t->vertices[2];
     int v3 = t->vertices[3];
-    voronoi_assert(v0 >= 0 && v1 >= 0 && v2 >= 0 && v3 >= 0);
 
     /* if the tetrahedron is inactive or not linked to a non-ghost, non-dummy
      * vertex, it is not a grid vertex and we can skip it. */
@@ -207,6 +206,8 @@ inline static void voronoi_init(struct voronoi *restrict v,
       voronoi_vertices[3 * i + 2] = NAN;
       continue;
     }
+    /* Check that the vertices are valid */
+    voronoi_assert(v0 >= 0 && v1 >= 0 && v2 >= 0 && v3 >= 0);
 
     /* Extract coordinates from the Delaunay vertices (generators)
      * FUTURE NOTE: In swift we should read this from the particles themselves!
