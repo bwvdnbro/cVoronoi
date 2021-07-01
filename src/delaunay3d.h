@@ -25,9 +25,7 @@ inline static void delaunay_init_tetrahedron(struct delaunay* d, int t, int v0,
 inline static int delaunay_free_indices_queue_pop(struct delaunay* restrict d);
 inline static void delaunay_free_index_enqueue(struct delaunay* restrict d,
                                                int idx);
-inline static int delaunay_tetrahedron_queue_pop(struct delaunay* restrict d);
-inline static void delaunay_tetrahedron_enqueue(struct delaunay* restrict d,
-                                                int t);
+inline static int get_next_tetrahedron_to_check(struct delaunay* restrict d);
 inline static void delaunay_append_tetrahedron_containing_vertex(
     struct delaunay* d, int t);
 inline static int delaunay_find_tetrahedra_containing_vertex(struct delaunay* d,
@@ -132,17 +130,7 @@ struct delaunay {
    *  tetrahedra are added to this queue and are tested to see if the
    *  Delaunay criterion (empty circumcircles) still holds. New tetrahedra
    *  created when flipping invalid tetrahedra are also added to the queue. */
-  int* tetrahedron_queue;
-
-  /*! @brief Next available index in the tetrahedron_queue. Determines both the
-   * actual size of the tetrahedron_queue as the first element that will be
-   * popped from the tetrahedron_queue. */
-  int tetrahedron_q_index;
-
-  /*! @brief Current size of the tetrahedron_queue in memory. If
-   * tetrahedron_q_size matches tetrahedron_q_index, the memory buffer
-   * is full and needs to be expanded. */
-  int tetrahedron_q_size;
+  struct int_lifo_queue tetrahedra_to_check;
 
   /*! @brief Lifo queue of free spots in the tetrahedra array. Sometimes 3
    * tetrahedra can be split into 2 new ones. This leaves a free spot in the
@@ -235,12 +223,10 @@ inline static void delaunay_init(struct delaunay* restrict d,
   d->tetrahedron_index = 0;
   d->tetrahedron_size = tetrahedron_size;
 
-  /* allocate memory for the tetrahedron_queue (note that the tetrahedron_queue
-     size of 10 was chosen arbitrarily, and a proper value should be chosen
-     based on performance measurements) */
-  d->tetrahedron_queue = (int*)malloc(10 * sizeof(int));
-  d->tetrahedron_q_index = 0;
-  d->tetrahedron_q_size = 10;
+  /* allocate memory for the tetrahedra_to_check queue (note that the size of 10
+   * was chosen arbitrarily, and a proper value should be chosen based on
+   * performance measurements) */
+  int_lifo_queue_init(&d->tetrahedra_to_check, 10);
 
   /* allocate memory for the free_indices_queue */
   d->free_indices_queue = (int*)malloc(10 * sizeof(int));
@@ -340,7 +326,7 @@ inline static void delaunay_destroy(struct delaunay* restrict d) {
   free(d->vertex_tetrahedron_index);
   free(d->search_radii);
   free(d->tetrahedra);
-  free(d->tetrahedron_queue);
+  int_lifo_queue_destroy(&d->tetrahedra_to_check);
   free(d->free_indices_queue);
   free(d->tetrahedra_containing_vertex);
   int3_fifo_queue_destroy(&d->get_radius_queue);
@@ -840,10 +826,10 @@ inline static void delaunay_one_to_four_flip(struct delaunay* d, int v, int t) {
   tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[3]], idx_in_ngbs[3], t, 3);
 
   /* enqueue all new/updated tetrahedra for delaunay checks */
-  delaunay_tetrahedron_enqueue(d, t);
-  delaunay_tetrahedron_enqueue(d, t1);
-  delaunay_tetrahedron_enqueue(d, t2);
-  delaunay_tetrahedron_enqueue(d, t3);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t1);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t2);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t3);
 }
 
 /**
@@ -967,12 +953,12 @@ inline static void delaunay_two_to_six_flip(struct delaunay* d, int v,
   tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[5]], idx_in_ngbs[5], tn3, 2);
 
   /* Add new/updated tetrahedra to queue for checking */
-  delaunay_tetrahedron_enqueue(d, t[0]);
-  delaunay_tetrahedron_enqueue(d, t[1]);
-  delaunay_tetrahedron_enqueue(d, tn2);
-  delaunay_tetrahedron_enqueue(d, tn3);
-  delaunay_tetrahedron_enqueue(d, tn4);
-  delaunay_tetrahedron_enqueue(d, tn5);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t[0]);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t[1]);
+  int_lifo_queue_push(&d->tetrahedra_to_check, tn2);
+  int_lifo_queue_push(&d->tetrahedra_to_check, tn3);
+  int_lifo_queue_push(&d->tetrahedra_to_check, tn4);
+  int_lifo_queue_push(&d->tetrahedra_to_check, tn5);
 }
 
 /**
@@ -1121,7 +1107,7 @@ inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v,
 
   /* add new/updated tetrahedra to the queue for checking */
   for (int j = 0; j < 2 * n; j++) {
-    delaunay_tetrahedron_enqueue(d, tn[j]);
+    int_lifo_queue_push(&d->tetrahedra_to_check, tn[j]);
   }
 }
 
@@ -1232,9 +1218,9 @@ inline static void delaunay_two_to_three_flip(struct delaunay* restrict d,
   tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[5]], idx_in_ngb[5], t0, 2);
 
   /* add new/updated tetrahedrons to queue */
-  delaunay_tetrahedron_enqueue(d, t0);
-  delaunay_tetrahedron_enqueue(d, t1);
-  delaunay_tetrahedron_enqueue(d, t2);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t0);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t1);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t2);
 }
 
 /**
@@ -1408,10 +1394,10 @@ inline static void delaunay_four_to_four_flip(struct delaunay* restrict d,
   tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[7]], idx_in_ngb[7], t0, 1);
 
   /* append updated tetrahedra to queue for checking */
-  delaunay_tetrahedron_enqueue(d, t0);
-  delaunay_tetrahedron_enqueue(d, t1);
-  delaunay_tetrahedron_enqueue(d, t2);
-  delaunay_tetrahedron_enqueue(d, t3);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t0);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t1);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t2);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t3);
 }
 
 /**
@@ -1544,8 +1530,8 @@ inline static int delaunay_three_to_two_flip(struct delaunay* restrict d,
   tetrahedron_swap_neighbour(&d->tetrahedra[ngbs[5]], idx_in_ngb[5], t1, 2);
 
   /* add updated tetrahedra to queue */
-  delaunay_tetrahedron_enqueue(d, t0);
-  delaunay_tetrahedron_enqueue(d, t1);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t0);
+  int_lifo_queue_push(&d->tetrahedra_to_check, t1);
 
   /* return invalidated tetrahedron */
   return t2;
@@ -1562,7 +1548,7 @@ inline static void delaunay_check_tetrahedra(struct delaunay* d, int v) {
   int* freed = (int*)malloc(10 * sizeof(int));
   int freed_size = 10;
   int freed_tetrahedron;
-  int t = delaunay_tetrahedron_queue_pop(d);
+  int t = get_next_tetrahedron_to_check(d);
   while (t >= 0) {
     freed_tetrahedron = delaunay_check_tetrahedron(d, t, v);
     /* Did we free a tetrahedron? */
@@ -1576,7 +1562,7 @@ inline static void delaunay_check_tetrahedra(struct delaunay* d, int v) {
       n_freed++;
     }
     /* Pop next tetrahedron to check */
-    t = delaunay_tetrahedron_queue_pop(d);
+    t = get_next_tetrahedron_to_check(d);
   }
   /* Enqueue the newly freed tetrahedra indices */
   for (int i = 0; i < n_freed; i++) {
@@ -1965,28 +1951,6 @@ inline static int delaunay_free_indices_queue_pop(struct delaunay* restrict d) {
 }
 
 /**
- * @brief Add the given tetrahedron to the queue of tetrahedra that need
- * checking.
- *
- * @param d Delaunay tessellation.
- * @param t Tetrahedron index.
- */
-inline static void delaunay_tetrahedron_enqueue(struct delaunay* restrict d,
-                                                int t) {
-  /* make sure there is sufficient space in the queue */
-  if (d->tetrahedron_q_index == d->tetrahedron_q_size) {
-    /* there isn't: increase the size of the queue with a factor 2. */
-    d->tetrahedron_q_size <<= 1;
-    d->tetrahedron_queue =
-        (int*)realloc(d->tetrahedron_queue, d->tetrahedron_size * sizeof(int));
-  }
-  delaunay_log("Enqueuing tetrahedron %i", t);
-  /* add the tetrahedron to the queue and advance the queue index */
-  d->tetrahedron_queue[d->tetrahedron_q_index] = t;
-  ++d->tetrahedron_q_index;
-}
-
-/**
  * @brief Pop the next active tetrahedron to check from the end of the queue.
  *
  * If no more active tetrahedrons are queued, this function returns a negative
@@ -1998,12 +1962,11 @@ inline static void delaunay_tetrahedron_enqueue(struct delaunay* restrict d,
  * @param d Delaunay tessellation.
  * @return Index of the next tetrahedron to test, or -1 if the queue is empty.
  */
-inline static int delaunay_tetrahedron_queue_pop(struct delaunay* restrict d) {
+inline static int get_next_tetrahedron_to_check(struct delaunay* restrict d) {
   int active = 0;
   int t;
-  while (!active && d->tetrahedron_q_index > 0) {
-    --d->tetrahedron_q_index;
-    t = d->tetrahedron_queue[d->tetrahedron_q_index];
+  while (!active && !int_lifo_queue_is_empty(&d->tetrahedra_to_check)) {
+    t = int_lifo_queue_pop(&d->tetrahedra_to_check);
     active = d->tetrahedra[t].active;
   }
   return active ? t : -1;

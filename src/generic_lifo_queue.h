@@ -2,7 +2,8 @@
 // Created by yuyttenh on 30/06/2021.
 //
 
-/* QUEUE_NAME and QUEUE_TYPE must be defined before importing this header! */
+/* QUEUE_TYPE and optionally QUEUE_NAME must be defined before importing this
+ * header! */
 
 #define PASTE(x, y) x##_##y
 
