@@ -8,10 +8,10 @@
  * @brief Generates code for a int LIFO queue and an int3 FIFO queue
  */
 
-#include "tuples.h"
-
 #ifndef CVORONOI_QUEUES_H
 #define CVORONOI_QUEUES_H
+
+#include "tuples.h"
 
 #define QUEUE_SAFETY_CHECKS
 
