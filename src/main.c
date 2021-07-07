@@ -42,13 +42,14 @@
 #define _GNU_SOURCE
 
 #include <math.h>
+
 #include "cell.h"
 #include "queues.h"
 #include "tuples.h"
 
 /**
- * @brief Auxiliary function used to print an arg-sorted list of vertex_indices to a
- * file.
+ * @brief Auxiliary function used to print an arg-sorted list of vertex_indices
+ * to a file.
  *
  * @param order Array containing the indices that sort the vertex array.
  * @param vertices Vertex array.

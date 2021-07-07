@@ -384,8 +384,8 @@ inline static void delaunay_init(struct delaunay* restrict d,
   d->last_triangle = first_triangle;
 
   /* Perform potential log output and sanity checks */
-//  delaunay_log("Post init check");
-//  delaunay_check_tessellation(d);
+  //  delaunay_log("Post init check");
+  //  delaunay_check_tessellation(d);
 }
 
 /**

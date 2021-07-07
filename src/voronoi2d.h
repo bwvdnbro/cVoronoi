@@ -206,7 +206,8 @@ static inline void voronoi_init(struct voronoi *restrict v,
           "one of the neighbouring cells is empty.");
     }
 
-    geometry2d_compute_circumcenter(v0x, v0y, v1x, v1y, v2x, v2y, &vertices[2 * i]);
+    geometry2d_compute_circumcenter(v0x, v0y, v1x, v1y, v2x, v2y,
+                                    &vertices[2 * i]);
   } /* loop over the Delaunay triangles and compute the circumcenters */
 
   /* Allocate memory for the voronoi pairs. */

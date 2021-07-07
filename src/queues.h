@@ -21,5 +21,4 @@
 #define QUEUE_TYPE int3
 #include "generic_fifo_queue.h"
 
-
 #endif  // CVORONOI_QUEUES_H

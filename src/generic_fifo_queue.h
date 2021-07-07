@@ -37,7 +37,6 @@
 #define _POP(f) PASTE(f, pop)
 #define QUEUE_POP _POP(QUEUE_NAME)
 
-
 /**@brief
  * Generic definition of a FIFO queue
  */
@@ -55,9 +54,7 @@ inline static void QUEUE_INIT(struct QUEUE_NAME *q, int size) {
   q->end = 0;
 }
 
-inline static void QUEUE_DESTROY(struct QUEUE_NAME *q) {
-  free(q->values);
-}
+inline static void QUEUE_DESTROY(struct QUEUE_NAME *q) { free(q->values); }
 
 inline static void QUEUE_RESET(struct QUEUE_NAME *q) {
   q->start = 0;

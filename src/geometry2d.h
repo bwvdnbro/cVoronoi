@@ -355,8 +355,8 @@ static inline double geometry2d_compute_centroid_volume_triangle(
  * @return Surface area of the face.
  */
 static inline double geometry2d_compute_midpoint_area_face(double ax, double ay,
-                                                         double bx, double by,
-                                                         double* result) {
+                                                           double bx, double by,
+                                                           double* result) {
 
   result[0] = 0.5 * (ax + bx);
   result[1] = 0.5 * (ay + by);

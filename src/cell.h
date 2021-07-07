@@ -228,7 +228,7 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
      the number of triangles with circumcircles larger than the current search
      radius */
   int count = delaunay_update_search_radii(&c->d, old_r);
-//  printf("count: %i\n", count);
+  //  printf("count: %i\n", count);
   while (count > 0) {
     /* add ghosts for the positive horizontal boundary */
     int i = 0;
@@ -368,7 +368,7 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
     /* update the search radii to the new value and count the number of larger
        circumcircles. */
     count = delaunay_update_search_radii(&c->d, r);
-//    printf("count: %i\n", count);
+    //    printf("count: %i\n", count);
 
     /* we do not want to add the same ghost twice (this causes the incremental
        construction algorithm to crash), so we need to keep track of the
@@ -393,9 +393,10 @@ static inline void cell_make_delaunay_periodic(struct cell *c) {
     }
   }
 #ifdef DELAUNAY_CHECKS
-  for (int i = c->d.vertex_start; i < c->d.vertex_end; i++){
+  for (int i = c->d.vertex_start; i < c->d.vertex_end; i++) {
     double search_radius = delaunay_get_search_radius(&c->d, i);
-    double radius = delaunay_get_radius(&c->d, c->d.vertex_tetrahedron_links[i]);
+    double radius =
+        delaunay_get_radius(&c->d, c->d.vertex_tetrahedron_links[i]);
     delaunay_assert(search_radius >= 2. * radius);
     delaunay_assert(search_radius < c->hs.side[0]);
   }

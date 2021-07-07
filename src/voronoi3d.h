@@ -143,11 +143,13 @@ struct voronoi {
 /* Forward declarations */
 inline static int double_cmp(double double1, double double2,
                              unsigned long precision);
+
 inline static int voronoi_new_face(struct voronoi *v, int sid,
                                    struct cell *restrict c,
                                    int left_part_pointer,
                                    int right_part_pointer, double *vertices,
                                    int n_vertices);
+
 inline static void voronoi_check_grid(struct voronoi *restrict v);
 
 /**
@@ -200,7 +202,7 @@ inline static void voronoi_init(struct voronoi *restrict v,
     /* if the tetrahedron is inactive or not linked to a non-ghost, non-dummy
      * vertex, it is not a grid vertex and we can skip it. */
     if (!t->active || (v0 >= v->number_of_cells && v1 >= v->number_of_cells &&
-        v2 >= v->number_of_cells && v3 >= v->number_of_cells)) {
+                       v2 >= v->number_of_cells && v3 >= v->number_of_cells)) {
       voronoi_vertices[3 * i] = NAN;
       voronoi_vertices[3 * i + 1] = NAN;
       voronoi_vertices[3 * i + 2] = NAN;
@@ -487,7 +489,7 @@ inline static void voronoi_init(struct voronoi *restrict v,
     neighbour_flags[gen_idx_in_d] = 0;
     for (int i = 0; i < neighbour_info_q.end; i++) {
       voronoi_assert(neighbour_info_q.values[i]._1 < d->vertex_index);
-          neighbour_flags[neighbour_info_q.values[i]._1] = 0;
+      neighbour_flags[neighbour_info_q.values[i]._1] = 0;
     }
 #ifdef VORONOI_CHECKS
     for (int i = 0; i < d->vertex_index; i++) {
@@ -569,6 +571,7 @@ inline static int voronoi_new_face(struct voronoi *v, int sid,
  */
 inline static void voronoi_check_grid(struct voronoi *restrict v) {
 #ifdef VORONOI_CHECKS
+
   double total_volume = 0.;
   for (int i = 0; i < v->number_of_cells; i++) {
     total_volume += v->cells[i].volume;

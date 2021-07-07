@@ -11,13 +11,14 @@
 
 #ifndef CVORONOI_VORONOI_H
 
-#include <stdlib.h>
 #include <stdio.h>
-#include "delaunay.h"
-#include "geometry.h"
-#include "dimensionality.h"
+#include <stdlib.h>
 
-#define voronoi_error(s, ...) \
+#include "delaunay.h"
+#include "dimensionality.h"
+#include "geometry.h"
+
+#define voronoi_error(s, ...)        \
   fprintf(stderr, s, ##__VA_ARGS__); \
   abort();
 

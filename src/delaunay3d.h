@@ -443,8 +443,8 @@ inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
                                                 d->vertex_size * sizeof(int));
     d->search_radii =
         (double*)realloc(d->search_radii, d->vertex_size * sizeof(double));
-    d->get_radius_neighbour_flags =
-        (int*)realloc(d->get_radius_neighbour_flags, d->vertex_size * sizeof(int));
+    d->get_radius_neighbour_flags = (int*)realloc(d->get_radius_neighbour_flags,
+                                                  d->vertex_size * sizeof(int));
   }
 
   delaunay_init_vertex(d, d->vertex_index, x, y, z);
@@ -1746,7 +1746,8 @@ inline static double delaunay_get_radius(const struct delaunay* restrict d,
 inline static double delaunay_get_search_radius(struct delaunay* restrict d,
                                                 int gen_idx_in_d) {
   /* Clean up */
-  delaunay_assert(int3_fifo_queue_is_empty(&d->get_radius_neighbour_info_queue));
+  delaunay_assert(
+      int3_fifo_queue_is_empty(&d->get_radius_neighbour_info_queue));
   int3_fifo_queue_reset(&d->get_radius_neighbour_info_queue);
 #ifdef DELAUNAY_CHECKS
   for (int i = 0; i < d->vertex_index; i++) {
@@ -1851,8 +1852,10 @@ inline static double delaunay_get_search_radius(struct delaunay* restrict d,
   /* reset flags */
   d->get_radius_neighbour_flags[gen_idx_in_d] = 0;
   for (int i = 0; i < d->get_radius_neighbour_info_queue.end; i++) {
-    delaunay_assert(d->get_radius_neighbour_info_queue.values[i]._1 < d->vertex_index);
-    d->get_radius_neighbour_flags[d->get_radius_neighbour_info_queue.values[i]._1] = 0;
+    delaunay_assert(d->get_radius_neighbour_info_queue.values[i]._1 <
+                    d->vertex_index);
+    d->get_radius_neighbour_flags[d->get_radius_neighbour_info_queue.values[i]
+                                      ._1] = 0;
   }
 #ifdef DELAUNAY_CHECKS
   for (int i = 0; i < d->vertex_index; i++) {

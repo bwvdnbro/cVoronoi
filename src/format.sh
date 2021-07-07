@@ -2,7 +2,7 @@
 
 # Clang format command, can be overridden using CLANG_FORMAT_CMD.
 # We currrently use version 10.0 so any overrides should provide that.
-clang=${CLANG_FORMAT_CMD:="clang-format-9"}
+clang=${CLANG_FORMAT_CMD:="clang-format"}
 
 # Formatting command
 cmd="$clang -style=file $(ls *.[ch])"
