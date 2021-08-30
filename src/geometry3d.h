@@ -63,9 +63,60 @@ inline static void geometry3d_destroy(struct geometry3d* restrict g) {
              g->da, g->ac, g->bd, g->result, NULL);
 }
 
-inline static double geometry3d_orient() {
-  // TODO
-  return -1.;
+/**
+ * @brief Inexact, but fast orientation test.
+ *
+ * This function calculates a maximal error bound on the result due to numerical
+ * roundoff error. If the result is smaller than this error bound, the function
+ * returns 0. Else this functions behaves similar to it's exact counterpart.
+ *
+ * */
+
+inline static int geometry3d_orient(const double ax, const double ay,
+                                    const double az, const double bx,
+                                    const double by, const double bz,
+                                    const double cx, const double cy,
+                                    const double cz, const double dx,
+                                    const double dy, const double dz) {
+  /* Compute relative coordinates */
+  const double adx = ax - dx;
+  const double ady = ay - dy;
+  const double adz = az - dz;
+
+  const double bdx = bx - dx;
+  const double bdy = by - dy;
+  const double bdz = bz - dz;
+
+  const double cdx = cx - dx;
+  const double cdy = cy - dy;
+  const double cdz = cz - dz;
+
+  /* Compute intermediate terms */
+  const double bdxcdy = bdx * cdy;
+  const double cdxbdy = cdx * bdy;
+
+  const double cdxady = cdx * ady;
+  const double adxcdy = adx * cdy;
+
+  const double adxbdy = adx * bdy;
+  const double bdxady = bdx * ady;
+
+  /* Compute error bounds */
+  double errbound = (fabs(bdxcdy) + fabs(cdxbdy)) * fabs(adz) +
+          (fabs(cdxady) + fabs(adxcdy)) * fabs(bdz) +
+          (fabs(adxbdy) + fabs(bdxady)) * fabs(cdz);
+  // not really the right factor (probably too large), but this will do
+  //  errbound *= 1.e-10;
+  errbound *= DBL_EPSILON * 4;
+
+  /* Compute result */
+  double result = adz * (bdxcdy - cdxbdy) + bdz * (cdxady - adxcdy) +
+          cdz * (adxbdy - bdxady);
+  if (result < -errbound || result > errbound) {
+    return sgn(result);
+  }
+
+  return 0;
 }
 
 /**
@@ -142,9 +193,144 @@ inline static int geometry3d_orient_exact(
   return mpz_sgn(g->result);
 }
 
-inline static double geometry3d_in_sphere() {
-  // TODO
-  return -1.;
+/**
+ * @brief Adaptive 3D orientation test
+ *
+ * Returns +1 if the fourth point is below the plane through the
+ * three other points, -1 if it is above and 0 if the four points
+ * are coplanar.
+ *
+ * Above is defined as the direction from which the three points in the plane
+ * are seen in counterclockwise order, e.g. if the points are A (0,0,0), B
+ * (0,0,1), C (0,1,0) and D (1,0,0), then this function returns 1.
+ *
+ * @param al Integer coordinates of the first point
+ * @param bl Integer coordinates of the second point
+ * @param cl Integer coordinates of the third point
+ * @param dl Integer coordinates of the fourth point
+ * @param ad Coordinates of the first point, have to be in the interval [1,2]
+ * @param bd Coordinates of the second point, have to be in the interval [1,2]
+ * @param cd Coordinates of the third point, have to be in the interval [1,2]
+ * @param dd Coordinates of the fourth point, have to be in the interval [1,2]
+ * @return A positive, negative or zero value, depending on the outcome of the
+ * test
+ */
+inline static int geometry3d_orient_adaptive(
+        struct geometry3d* restrict g, const unsigned long* al,
+                const unsigned long* bl, const unsigned long* cl, const unsigned long* dl,
+                const double* ad, const double* bd, const double* cd, const double* dd) {
+
+  int result = geometry3d_orient(ad[0], ad[1], ad[2], bd[0], bd[1], bd[2],
+                                 cd[0], cd[1], cd[2], dd[0], dd[1], dd[2]);
+
+  if (result == 0) {
+    result =
+            geometry3d_orient_exact(g, al[0], al[1], al[2], bl[0], bl[1], bl[2],
+                                    cl[0], cl[1], cl[2], dl[0], dl[1], dl[2]);
+  }
+
+  return result;
+}
+
+inline static int geometry3d_in_sphere(
+        const double ax, const double ay, const double az, const double bx,
+        const double by, const double bz, const double cx, const double cy,
+        const double cz, const double dx, const double dy, const double dz,
+        const double ex, const double ey, const double ez) {
+
+  /* Compute relative coordinates */
+  const double aex = ax - ex;
+  const double aey = ay - ey;
+  const double aez = az - ez;
+
+  const double bex = bx - ex;
+  const double bey = by - ey;
+  const double bez = bz - ez;
+
+  const double cex = cx - ex;
+  const double cey = cy - ey;
+  const double cez = cz - ez;
+
+  const double dex = dx - ex;
+  const double dey = dy - ey;
+  const double dez = dz - ez;
+
+  /* Compute intermediate values */
+  const double aexbey = aex * bey;
+  const double bexaey = bex * aey;
+  const double ab = aexbey - bexaey;
+  const double bexcey = bex * cey;
+  const double cexbey = cex * bey;
+  const double bc = bexcey - cexbey;
+  const double cexdey = cex * dey;
+  const double dexcey = dex * cey;
+  const double cd = cexdey - dexcey;
+  const double dexaey = dex * aey;
+  const double aexdey = aex * dey;
+  const double da = dexaey - aexdey;
+  const double aexcey = aex * cey;
+  const double cexaey = cex * aey;
+  const double ac = aexcey - cexaey;
+  const double bexdey = bex * dey;
+  const double dexbey = dex * bey;
+  const double bd = bexdey - dexbey;
+
+  const double abc = aez * bc - bez * ac + cez * ab;
+  const double bcd = bez * cd - cez * bd + dez * bc;
+  const double cda = cez * da + dez * ac + aez * cd;
+  const double dab = dez * ab + aez * bd + bez * da;
+
+  const double aenrm2 = aex * aex + aey * aey + aez * aez;
+  const double benrm2 = bex * bex + bey * bey + bez * bez;
+  const double cenrm2 = cex * cex + cey * cey + cez * cez;
+  const double denrm2 = dex * dex + dey * dey + dez * dez;
+
+  /* Compute errorbound */
+  const double aezplus = fabs(aez);
+  const double bezplus = fabs(bez);
+  const double cezplus = fabs(cez);
+  const double dezplus = fabs(dez);
+  const double aexbeyplus = fabs(aexbey);
+  const double bexaeyplus = fabs(bexaey);
+  const double bexceyplus = fabs(bexcey);
+  const double cexbeyplus = fabs(cexbey);
+  const double cexdeyplus = fabs(cexdey);
+  const double dexceyplus = fabs(dexcey);
+  const double dexaeyplus = fabs(dexaey);
+  const double aexdeyplus = fabs(aexdey);
+  const double aexceyplus = fabs(aexcey);
+  const double cexaeyplus = fabs(cexaey);
+  const double bexdeyplus = fabs(bexdey);
+  const double dexbeyplus = fabs(dexbey);
+
+  double errbound = ((cexdeyplus + dexceyplus) * bezplus +
+          (dexbeyplus + bexdeyplus) * cezplus +
+          (bexceyplus + cexbeyplus) * dezplus) *
+                  aenrm2 +
+                  ((dexaeyplus + aexdeyplus) * cezplus +
+                  (aexceyplus + cexaeyplus) * dezplus +
+                  (cexdeyplus + dexceyplus) * aezplus) *
+                  benrm2 +
+                  ((aexbeyplus + bexaeyplus) * dezplus +
+                  (bexdeyplus + dexbeyplus) * aezplus +
+                  (dexaeyplus + aexdeyplus) * bezplus) *
+                  cenrm2 +
+                  ((bexceyplus + cexbeyplus) * aezplus +
+                  (cexaeyplus + aexceyplus) * bezplus +
+                  (aexbeyplus + bexaeyplus) * cezplus) *
+                  denrm2;
+  // not really the right factor (which is smaller), but this will do
+  //  errbound *= 1.e-10;
+  errbound *= DBL_EPSILON * 11;
+
+  /* Compute result */
+  const double result = (denrm2 * abc - cenrm2 * dab) + (benrm2 * cda - aenrm2 * bcd);
+
+  if (result < -errbound || result > errbound) {
+    return sgn(result);
+  }
+
+  return 0;
 }
 
 /**
@@ -263,6 +449,25 @@ inline static int geometry3d_in_sphere_exact(
   mpz_submul(g->result, g->tmp1, g->tmp2);
 
   return mpz_sgn(g->result);
+}
+
+inline static int geometry3d_in_sphere_adaptive(
+        struct geometry3d* restrict g, const unsigned long* al,
+                const unsigned long* bl, const unsigned long* cl, const unsigned long* dl,
+                const unsigned long* el, const double* ad, const double* bd,
+                const double* cd, const double* dd, const double* ed) {
+
+  int result = geometry3d_in_sphere(ad[0], ad[1], ad[2], bd[0], bd[1], bd[2],
+                                    cd[0], cd[1], cd[2], dd[0], dd[1], dd[2],
+                                    ed[0], ed[1], ed[2]);
+
+  if (result == 0) {
+    result = geometry3d_in_sphere_exact(g, al[0], al[1], al[2], bl[0], bl[1],
+                                        bl[2], cl[0], cl[1], cl[2], dl[0],
+                                        dl[1], dl[2], el[0], el[1], el[2]);
+  }
+
+  return result;
 }
 
 /**

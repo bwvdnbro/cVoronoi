@@ -21,17 +21,12 @@
 /*! @brief Activate extensive log output. */
 //#define DELAUNAY_LOG_OUTPUT
 /*! @brief Activate runtime assertions. */
-//#define DELAUNAY_DO_ASSERTIONS
-/*! @brief Use and output non-exact floating point geometrical tests as well as
- *  the default exact integer tests. This is especially helpful when trying to
- *  visualise the geometry3d, since the integer coordinates are very hard to
- *  interpret. */
-//#define DELAUNAY_NONEXACT
+#define DELAUNAY_DO_ASSERTIONS
 /*! @brief Check the validity of the Delaunay tessellation after every addition
  *  of a new vertex. This feature is very helpful when debugging to catch
  *  problems as they happen, but adds a very significant runtime cost. It should
  *  never be activated for production runs! */
-//#define DELAUNAY_CHECKS
+#define DELAUNAY_CHECKS
 
 /**
  * @brief Print the given message to the standard output.

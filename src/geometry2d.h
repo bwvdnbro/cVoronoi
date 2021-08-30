@@ -30,6 +30,9 @@
 
 #include <gmp.h>
 #include <math.h>
+
+#include "utils.h"
+
 /**
  * @brief Auxiliary variables used by the arbirary exact tests. Since allocating
  * and deallocating these variables poses a significant overhead, they are best
@@ -57,7 +60,7 @@ struct geometry2d {
  *
  * @param g Geometry object.
  */
-inline static void geometry2d_init(struct geometry2d* restrict g) {
+inline static void geometry2d_init(struct geometry2d *restrict g) {
   mpz_inits(g->aix, g->aiy, g->bix, g->biy, g->cix, g->ciy, g->dix, g->diy,
             g->s1x, g->s1y, g->s2x, g->s2y, g->s3x, g->s3y, g->tmp1, g->tmp2,
             g->result, NULL);
@@ -68,7 +71,7 @@ inline static void geometry2d_init(struct geometry2d* restrict g) {
  *
  * @param g Geometry object.
  */
-inline static void geometry2d_destroy(struct geometry2d* restrict g) {
+inline static void geometry2d_destroy(struct geometry2d *restrict g) {
   mpz_clears(g->aix, g->aiy, g->bix, g->biy, g->cix, g->ciy, g->dix, g->diy,
              g->s1x, g->s1y, g->s2x, g->s2y, g->s3x, g->s3y, g->tmp1, g->tmp2,
              g->result, NULL);
@@ -97,26 +100,40 @@ inline static void geometry2d_destroy(struct geometry2d* restrict g) {
  * @param cx, cy Third point.
  * @return Signed double area of the triangle formed by a, b and c.
  */
-inline static double geometry2d_orient(double ax, double ay, double bx,
+inline static int geometry2d_orient(double ax, double ay, double bx,
                                        double by, double cx, double cy) {
 
-  /* the code below stays as close as possible to the implementation of the
-     exact test below */
-  double s1x, s1y, s2x, s2y, result;
+  double det_left = (ax - cx) * (by - cy);
+  double det_right = (ay - cy) * (bx - cx);
 
-  /* compute the relative positions of a and b w.r.t. c */
-  s1x = ax - cx;
-  s1y = ay - cy;
+  double err_bound;
+  double result = det_left - det_right;
 
-  s2x = bx - cx;
-  s2y = by - cy;
+  if (det_left > 0.0) {
+    if (det_right <= 0.0) {
+      return sgn(result);
+    } else {
+      err_bound = det_left + det_right;
+    }
+  } else if (det_left < 0.0) {
+    if (det_right >= 0.0) {
+      return sgn(result);
+    } else {
+      err_bound = -det_left - det_right;
+    }
+  } else {
+    return sgn(result);
+  }
 
-  /* compute the result in two steps */
-  result = 0.;
-  result += s1x * s2y;
-  result -= s1y * s2x;
+  // actual value is smaller, but this will do
+  //  err_bound *= 1.e-10;
+  err_bound *= DBL_EPSILON * 4;
 
-  return result;
+  if ((result >= err_bound) || (-result >= err_bound)) {
+    return sgn(result);
+  }
+
+  return 0;
 }
 
 /**
@@ -132,9 +149,9 @@ inline static double geometry2d_orient(double ax, double ay, double bx,
  * @param ax, ay, bx, by, cx, cy Integer coordinates of the three points.
  */
 inline static int geometry2d_orient_exact(
-    struct geometry2d* restrict g, unsigned long int ax, unsigned long int ay,
-    unsigned long int bx, unsigned long int by, unsigned long int cx,
-    unsigned long int cy) {
+        struct geometry2d *restrict g, unsigned long int ax, unsigned long int ay,
+        unsigned long int bx, unsigned long int by, unsigned long int cx,
+        unsigned long int cy) {
 
   /* store the input coordinates into the temporary large integer variables */
   mpz_set_ui(g->aix, ax);
@@ -160,6 +177,23 @@ inline static int geometry2d_orient_exact(
 
   /* evaluate the sign of result and return */
   return mpz_sgn(g->result);
+}
+
+inline static int geometry2d_orient_adaptive(struct geometry2d* restrict g,
+        const unsigned long* al,
+        const unsigned long* bl,
+        const unsigned long* cl,
+        const double* ad, const double* bd,
+        const double* cd) {
+
+  int result = geometry2d_orient(ad[0], ad[1], bd[0], bd[1], cd[0], cd[1]);
+
+  if (result == 0) {
+    result =
+            geometry2d_orient_exact(g, al[0], al[1], bl[0], bl[1], cl[0], cl[1]);
+  }
+
+  return result;
 }
 
 /**
@@ -189,47 +223,48 @@ inline static int geometry2d_orient_exact(
  * @param cx, cy Third point.
  * @param dx, dy Fourth point.
  */
-inline static double geometry2d_in_sphere(double ax, double ay, double bx,
-                                          double by, double cx, double cy,
-                                          double dx, double dy) {
+inline static int geometry2d_in_sphere(double ax, double ay, double bx,
+                                       double by, double cx, double cy,
+                                       double dx, double dy) {
 
-  /* the code below stays as close as possible to the implementation of the
-     exact test below */
-  double s1x, s1y, s2x, s2y, s3x, s3y, tmp1, tmp2, result;
+  /* Compute relative coordinates */
+  const double adx = ax - dx;
+  const double ady = ay - dy;
 
-  /* compute the relative coordinates of a, b and c w.r.t. d */
-  s1x = ax - dx;
-  s1y = ay - dy;
+  const double bdx = bx - dx;
+  const double bdy = by - dy;
 
-  s2x = bx - dx;
-  s2y = by - dy;
+  const double cdx = cx - dx;
+  const double cdy = cy - dy;
 
-  s3x = cx - dx;
-  s3y = cy - dy;
+  /* Compute intermediate variables */
+  const double bdxcdy = bdx * cdy;
+  const double cdxbdy = cdx * bdy;
+  const double adnrm2 = adx * adx + ady * ady;
 
-  /* compute the result in 3 steps */
-  result = 0.;
+  const double cdxady = cdx * ady;
+  const double adxcdy = adx * cdy;
+  const double bdnrm2 = bdx * bdx + bdy * bdy;
 
-  /* accumulate some terms in tmp1 and tmp2 and then update the result */
-  tmp1 = s2x * s3y;
-  tmp1 -= s3x * s2y;
-  tmp2 = s1x * s1x;
-  tmp2 += s1y * s1y;
-  result += tmp1 * tmp2;
+  const double adxbdy = adx * bdy;
+  const double bdxady = bdx * ady;
+  const double cdnrm2 = cdx * cdx + cdy * cdy;
 
-  tmp1 = s3x * s1y;
-  tmp1 -= s1x * s3y;
-  tmp2 = s2x * s2x;
-  tmp2 += s2y * s2y;
-  result += tmp1 * tmp2;
+  /* Compute errorbound */
+  double errbound = (fabs(bdxcdy) + fabs(cdxbdy)) * adnrm2 +
+                    (fabs(cdxady) + fabs(adxcdy)) * bdnrm2 +
+                    (fabs(adxbdy) + fabs(bdxady)) * cdnrm2;
+  // actual value is smaller, but this will do
+  //  errbound *= 1.e-10;
+  errbound *= DBL_EPSILON * 11;
 
-  tmp1 = s1x * s2y;
-  tmp1 -= s2x * s1y;
-  tmp2 = s3x * s3x;
-  tmp2 += s3y * s3y;
-  result += tmp1 * tmp2;
-
-  return result;
+  /* Compute result */
+  const double result = adnrm2 * (bdxcdy - cdxbdy) +
+                        bdnrm2 * (cdxady - adxcdy) + cdnrm2 * (adxbdy - bdxady);
+  if (result < -errbound || result > errbound) {
+    return sgn(result);
+  }
+  return 0;
 }
 
 /**
@@ -245,9 +280,9 @@ inline static double geometry2d_in_sphere(double ax, double ay, double bx,
  * @param ax, ay, bx, by, cx, cy, dx, dy Integer coordinates of the four points.
  */
 inline static int geometry2d_in_sphere_exact(
-    struct geometry2d* restrict g, unsigned long int ax, unsigned long int ay,
-    unsigned long int bx, unsigned long int by, unsigned long int cx,
-    unsigned long int cy, unsigned long int dx, unsigned long int dy) {
+        struct geometry2d *restrict g, unsigned long int ax, unsigned long int ay,
+        unsigned long int bx, unsigned long int by, unsigned long int cx,
+        unsigned long int cy, unsigned long int dx, unsigned long int dy) {
 
   /* copy the coordinate values into the large integer temporary variables */
   mpz_set_ui(g->aix, ax);
@@ -298,6 +333,22 @@ inline static int geometry2d_in_sphere_exact(
   return mpz_sgn(g->result);
 }
 
+inline static int geometry2d_in_sphere_adaptive(
+        struct geometry2d *restrict g, const unsigned long *al,
+        const unsigned long *bl, const unsigned long *cl, const unsigned long *dl,
+        const double *ad, const double *bd, const double *cd, const double *dd) {
+
+  int result = geometry2d_in_sphere(ad[0], ad[1], bd[0], bd[1], cd[0], cd[1],
+                                    dd[0], dd[1]);
+
+  if (result == 0) {
+    result = geometry2d_in_sphere_exact(g, al[0], al[1], bl[0], bl[1], cl[0],
+                                        cl[1], dl[0], dl[1]);
+  }
+
+  return result;
+}
+
 /**
  * @brief Compute the coordinates of the circumcenter of the triangle
  * (v0, v1, v2).
@@ -309,7 +360,7 @@ inline static int geometry2d_in_sphere_exact(
 static inline void geometry2d_compute_circumcenter(double v0x, double v0y,
                                                    double v1x, double v1y,
                                                    double v2x, double v2y,
-                                                   double* circumcenter) {
+                                                   double *circumcenter) {
   double ax = v1x - v0x;
   double ay = v1y - v0y;
   double bx = v2x - v0x;
@@ -322,6 +373,16 @@ static inline void geometry2d_compute_circumcenter(double v0x, double v0y,
   circumcenter[1] = v0y + (ax * b2 - bx * a2) / D;
 }
 
+
+inline static void geometry2d_compute_centroid_triangle(double ax, double ay,
+                                                        double bx, double by,
+                                                        double cx, double cy,
+                                                        double* result) {
+  result[0] = (ax + bx + cx) / 3;
+  result[1] = (ay + by + cy) / 3;
+}
+
+
 /**
  * @brief Compute the volume and centroid of the triangle through the given 3
  * points.
@@ -331,11 +392,10 @@ static inline void geometry2d_compute_circumcenter(double v0x, double v0y,
  * @return Volume of the triangle.
  */
 static inline double geometry2d_compute_centroid_volume_triangle(
-    double ax, double ay, double bx, double by, double cx, double cy,
-    double* result) {
+        double ax, double ay, double bx, double by, double cx, double cy,
+        double *result) {
 
-  result[0] = (ax + bx + cx) / 3.;
-  result[1] = (ay + by + cy) / 3.;
+  geometry2d_compute_centroid_triangle(ax, ay, bx, by, cx, cy, result);
 
   double s10x = bx - ax;
   double s10y = by - ay;
@@ -356,7 +416,7 @@ static inline double geometry2d_compute_centroid_volume_triangle(
  */
 static inline double geometry2d_compute_midpoint_area_face(double ax, double ay,
                                                            double bx, double by,
-                                                           double* result) {
+                                                           double *result) {
 
   result[0] = 0.5 * (ax + bx);
   result[1] = 0.5 * (ay + by);
@@ -365,6 +425,23 @@ static inline double geometry2d_compute_midpoint_area_face(double ax, double ay,
   double sy = by - ay;
 
   return sqrt(sx * sx + sy * sy);
+}
+
+inline static int geometry2d_test_line_segment_intersection(
+        const double *restrict p1, const double *restrict p2,
+        const double *restrict p3, const double *restrict p4) {
+  double t =
+          (p1[0] - p3[0]) * (p3[1] - p4[1]) - (p1[1] - p3[1]) * (p3[0] - p4[0]);
+  double u =
+          (p2[0] - p1[0]) * (p1[1] - p3[1]) - (p2[1] - p1[1]) * (p1[0] - p3[0]);
+
+  double denominator =
+          (p1[0] - p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] - p4[0]);
+
+  int test1 = (fabs(t) <= fabs(denominator)) && (sgn(t) == sgn(denominator));
+  int test2 = (fabs(u) <= fabs(denominator)) && (sgn(u) == sgn(denominator));
+
+  return test1 && test2;
 }
 
 #endif /* SWIFT_GEOMETRY_H */

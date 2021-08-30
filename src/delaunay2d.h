@@ -56,13 +56,11 @@ struct delaunay {
    *  main() and we probably want to get rid of it in a SWIFT implementation. */
   double* vertices;
 
-#ifdef DELAUNAY_NONEXACT
   /*! @brief Vertex positions, rescaled to the range 1-2. Kept here in case we
    *  want to adopt hybrid geometrical checks (floating point checks when safe,
    *  integer checks when there is a risk of numerical error leading to the
    *  wrong result) to speed things up. */
   double* rescaled_vertices;
-#endif
 
   /*! @brief Integer vertices. These are the vertex coordinates that are
    *  actually used during the incremental construction. */
@@ -169,11 +167,9 @@ inline static void delaunay_init_vertex(struct delaunay* restrict d,
   delaunay_assert(rescaled_y >= 1.);
   delaunay_assert(rescaled_y < 2.);
 
-#ifdef DELAUNAY_NONEXACT
   /* store a copy of the rescaled coordinates to apply non-exact tests */
   d->rescaled_vertices[2 * v] = rescaled_x;
   d->rescaled_vertices[2 * v + 1] = rescaled_y;
-#endif
 
   /* convert the rescaled coordinates to integer coordinates and store these */
   d->integer_vertices[2 * v] = delaunay_double_to_int(rescaled_x);
@@ -214,10 +210,8 @@ inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
     d->vertex_size <<= 1;
     d->vertices =
         (double*)realloc(d->vertices, d->vertex_size * 2 * sizeof(double));
-#ifdef DELAUNAY_NONEXACT
     d->rescaled_vertices = (double*)realloc(
         d->rescaled_vertices, d->vertex_size * 2 * sizeof(double));
-#endif
     d->integer_vertices = (unsigned long int*)realloc(
         d->integer_vertices, d->vertex_size * 2 * sizeof(unsigned long int));
     d->vertex_triangles =
@@ -288,9 +282,7 @@ inline static void delaunay_init(struct delaunay* restrict d,
 
   /* allocate memory for the vertex arrays */
   d->vertices = (double*)malloc(vertex_size * 2 * sizeof(double));
-#ifdef DELAUNAY_NONEXACT
   d->rescaled_vertices = (double*)malloc(vertex_size * 2 * sizeof(double));
-#endif
   d->integer_vertices =
       (unsigned long int*)malloc(vertex_size * 2 * sizeof(unsigned long int));
   d->vertex_triangles = (int*)malloc(vertex_size * sizeof(int));
@@ -400,6 +392,18 @@ inline static int delaunay_choose(int ngb0, int ngb1) {
   return (rand() % 2) ? ngb0 : ngb1;
 }
 
+inline static int delaunay_choose_line_segment_intersection(
+        int ngb0, int ngb1, const double* restrict face0_0,
+        const double* restrict face0_1, const double* restrict v,
+        const double* restrict centroid) {
+  /* test line segment */
+  if (geometry2d_test_line_segment_intersection(face0_0, face0_1, v,
+                                                centroid)) {
+    return ngb0;
+  }
+  return ngb1;
+}
+
 /**
  * @brief Test if the given vertex is within the given triangle.
  *
@@ -458,60 +462,27 @@ inline static int delaunay_test_point_inside_triangle(
   int vt2 = d->triangles[t].vertices[2];
   delaunay_log("Triangle vertices: %i %i %i", vt0, vt1, vt2);
 
-#ifdef DELAUNAY_NONEXACT
-  double ax = d->rescaled_vertices[2 * v];
-  double ay = d->rescaled_vertices[2 * v + 1];
+  const unsigned long* al = &d->integer_vertices[2 * v];
+  const unsigned long* bl = &d->integer_vertices[2 * vt0];
+  const unsigned long* cl = &d->integer_vertices[2 * vt1];
+  const unsigned long* dl = &d->integer_vertices[2 * vt2];
 
-  double bx = d->rescaled_vertices[2 * vt0];
-  double by = d->rescaled_vertices[2 * vt0 + 1];
+  const double* ad = &d->rescaled_vertices[2 * v];
+  const double* bd = &d->rescaled_vertices[2 * vt0];
+  const double* cd = &d->rescaled_vertices[2 * vt1];
+  const double* dd = &d->rescaled_vertices[2 * vt2];
 
-  double cx = d->rescaled_vertices[2 * vt1];
-  double cy = d->rescaled_vertices[2 * vt1 + 1];
-
-  double dx = d->rescaled_vertices[2 * vt2];
-  double dy = d->rescaled_vertices[2 * vt2 + 1];
-
-  delaunay_log("orient2d: (%g %g) (%g %g) (%g %g) = %g", cx, cy, dx, dy, ax, ay,
-               geometry2d_orient(cx, cy, dx, dy, ax, ay));
-  double test0 = geometry2d_orient(cx, cy, dx, dy, ax, ay);
-
-  delaunay_log("orient2d: (%g %g) (%g %g) (%g %g) = %g", dx, dy, bx, by, ax, ay,
-               geometry2d_orient(dx, dy, bx, by, ax, ay));
-  double test1 = geometry2d_orient(dx, dy, bx, by, ax, ay);
-
-  delaunay_log("orient2d: (%g %g) (%g %g) (%g %g) = %g", bx, by, cx, cy, ax, ay,
-               geometry2d_orient(bx, by, cx, cy, ax, ay));
-  double test2 = geometry2d_orient(bx, by, cx, cy, ax, ay);
-#endif
-
-  unsigned long int aix = d->integer_vertices[2 * v];
-  unsigned long int aiy = d->integer_vertices[2 * v + 1];
-
-  unsigned long int bix = d->integer_vertices[2 * vt0];
-  unsigned long int biy = d->integer_vertices[2 * vt0 + 1];
-
-  unsigned long int cix = d->integer_vertices[2 * vt1];
-  unsigned long int ciy = d->integer_vertices[2 * vt1 + 1];
-
-  unsigned long int dix = d->integer_vertices[2 * vt2];
-  unsigned long int diy = d->integer_vertices[2 * vt2 + 1];
+  double centroid[2];
+  geometry2d_compute_centroid_triangle(bd[0], bd[1], cd[0], cd[1], dd[0], dd[1],
+                                       centroid);
 
   /* test all 3 edges of the triangle. This code could potentially be sped up
      by including conditional statements that only execute necessary tests.
      However, it is unclear whether such an approach is beneficial because it
      would introduce additional branching of the code. */
-  int testi0 =
-      geometry2d_orient_exact(&d->geometry, cix, ciy, dix, diy, aix, aiy);
-  int testi1 =
-      geometry2d_orient_exact(&d->geometry, dix, diy, bix, biy, aix, aiy);
-  int testi2 =
-      geometry2d_orient_exact(&d->geometry, bix, biy, cix, ciy, aix, aiy);
-
-#ifdef DELAUNAY_NONEXACT
-  delaunay_assert(test0 * testi0 >= 0);
-  delaunay_assert(test1 * testi1 >= 0);
-  delaunay_assert(test2 * testi2 >= 0);
-#endif
+  int testi0 = geometry2d_orient_adaptive(&d->geometry, cl, dl, al, cd, dd, ad);
+  int testi1 = geometry2d_orient_adaptive(&d->geometry, dl, bl, al, dd, bd, ad);
+  int testi2 = geometry2d_orient_adaptive(&d->geometry, bl, cl, al, bd, cd, ad);
 
   /* to simplify the evaluation of the various scenarios, we combine the test
      results into a single test value that is then checked within a switch
@@ -522,14 +493,16 @@ inline static int delaunay_test_point_inside_triangle(
     case 1:
     case 2:
       /* testi0 and testi1 are negative */
-      *t_new = delaunay_choose(d->triangles[t].neighbours[0],
-                               d->triangles[t].neighbours[1]);
+      *t_new = delaunay_choose_line_segment_intersection(
+              d->triangles[t].neighbours[0], d->triangles[t].neighbours[1], cd, dd,
+              ad, centroid);
       return 0;
     case 4:
     case 8:
       /* testi0 and testi2 are negative */
-      *t_new = delaunay_choose(d->triangles[t].neighbours[0],
-                               d->triangles[t].neighbours[2]);
+      *t_new = delaunay_choose_line_segment_intersection(
+              d->triangles[t].neighbours[0], d->triangles[t].neighbours[2], cd, dd,
+              ad, centroid);
       return 0;
     case 5:
     case 6:
@@ -541,8 +514,9 @@ inline static int delaunay_test_point_inside_triangle(
     case 16:
     case 32:
       /* testi1 and testi2 are negative */
-      *t_new = delaunay_choose(d->triangles[t].neighbours[1],
-                               d->triangles[t].neighbours[2]);
+      *t_new = delaunay_choose_line_segment_intersection(
+              d->triangles[t].neighbours[1], d->triangles[t].neighbours[2], bd, dd,
+              ad, centroid);
       return 0;
     case 17:
     case 18:
@@ -680,43 +654,18 @@ inline static void delaunay_check_triangle(struct delaunay* restrict d, int t) {
 
   delaunay_log("Opposite vertex: %i", vt2_0);
 
-#ifdef DELAUNAY_NONEXACT
-  double ax = d->rescaled_vertices[2 * vt1_0];
-  double ay = d->rescaled_vertices[2 * vt1_0 + 1];
+  const unsigned long* al = &d->integer_vertices[2 * vt1_0];
+  const unsigned long* bl = &d->integer_vertices[2 * vt1_1];
+  const unsigned long* cl = &d->integer_vertices[2 * vt1_2];
+  const unsigned long* dl = &d->integer_vertices[2 * vt2_0];
 
-  double bx = d->rescaled_vertices[2 * vt1_1];
-  double by = d->rescaled_vertices[2 * vt1_1 + 1];
+  const double* ad = &d->rescaled_vertices[2 * vt1_0];
+  const double* bd = &d->rescaled_vertices[2 * vt1_1];
+  const double* cd = &d->rescaled_vertices[2 * vt1_2];
+  const double* dd = &d->rescaled_vertices[2 * vt2_0];
 
-  double cx = d->rescaled_vertices[2 * vt1_2];
-  double cy = d->rescaled_vertices[2 * vt1_2 + 1];
-
-  double dx = d->rescaled_vertices[2 * vt2_0];
-  double dy = d->rescaled_vertices[2 * vt2_0 + 1];
-
-  double test = geometry2d_in_sphere(ax, ay, bx, by, cx, cy, dx, dy);
-  delaunay_log("In circle: (%g %g) (%g %g) (%g %g) (%g %g) (%g) = %g", ax, ay,
-               bx, by, cx, cy, dx, dy,
-               geometry2d_orient(ax, ay, bx, by, cx, cy), test);
-#endif
-
-  unsigned long int aix = d->integer_vertices[2 * vt1_0];
-  unsigned long int aiy = d->integer_vertices[2 * vt1_0 + 1];
-
-  unsigned long int bix = d->integer_vertices[2 * vt1_1];
-  unsigned long int biy = d->integer_vertices[2 * vt1_1 + 1];
-
-  unsigned long int cix = d->integer_vertices[2 * vt1_2];
-  unsigned long int ciy = d->integer_vertices[2 * vt1_2 + 1];
-
-  unsigned long int dix = d->integer_vertices[2 * vt2_0];
-  unsigned long int diy = d->integer_vertices[2 * vt2_0 + 1];
-
-  int testi = geometry2d_in_sphere_exact(&d->geometry, aix, aiy, bix, biy, cix,
-                                         ciy, dix, diy);
-
-#ifdef DELAUNAY_NONEXACT
-  delaunay_assert(test * testi >= 0);
-#endif
+  int testi = geometry2d_in_sphere_adaptive(&d->geometry, al, bl, cl, dl, ad,
+                                            bd, cd, dd);
 
   /* check if we need to flip the edge */
   if (testi > 0) {
@@ -1028,9 +977,7 @@ inline static void delaunay_add_new_vertex(struct delaunay* restrict d,
  */
 inline static void delaunay_destroy(struct delaunay* restrict d) {
   free(d->vertices);
-#ifdef DELAUNAY_NONEXACT
   free(d->rescaled_vertices);
-#endif
   free(d->integer_vertices);
   free(d->vertex_triangles);
   free(d->vertex_triangle_index);
@@ -1158,25 +1105,13 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
     int vt1_1 = d->triangles[i].vertices[1];
     int vt1_2 = d->triangles[i].vertices[2];
 
-#ifdef DELAUNAY_NONEXACT
-    double ax = d->rescaled_vertices[2 * vt1_0];
-    double ay = d->rescaled_vertices[2 * vt1_0 + 1];
+    const unsigned long* al = &d->integer_vertices[2 * vt1_0];
+    const unsigned long* bl = &d->integer_vertices[2 * vt1_1];
+    const unsigned long* cl = &d->integer_vertices[2 * vt1_2];
 
-    double bx = d->rescaled_vertices[2 * vt1_1];
-    double by = d->rescaled_vertices[2 * vt1_1 + 1];
-
-    double cx = d->rescaled_vertices[2 * vt1_2];
-    double cy = d->rescaled_vertices[2 * vt1_2 + 1];
-#endif
-
-    unsigned long int aix = d->integer_vertices[2 * vt1_0];
-    unsigned long int aiy = d->integer_vertices[2 * vt1_0 + 1];
-
-    unsigned long int bix = d->integer_vertices[2 * vt1_1];
-    unsigned long int biy = d->integer_vertices[2 * vt1_1 + 1];
-
-    unsigned long int cix = d->integer_vertices[2 * vt1_2];
-    unsigned long int ciy = d->integer_vertices[2 * vt1_2 + 1];
+    const double* ad = &d->rescaled_vertices[2 * vt1_0];
+    const double* bd = &d->rescaled_vertices[2 * vt1_1];
+    const double* cd = &d->rescaled_vertices[2 * vt1_2];
 
     /* loop over the 3 neighbours of this triangle */
     for (int j = 0; j < 3; ++j) {
@@ -1238,20 +1173,13 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
            neighbour and make sure it is not in the triangle's circumcircle */
         int vt2_0 = d->triangles[ngb].vertices[i0];
 
-#ifdef DELAUNAY_NONEXACT
-        double dx = d->rescaled_vertices[2 * vt2_0];
-        double dy = d->rescaled_vertices[2 * vt2_0 + 1];
-        double test = geometry2d_in_sphere(ax, ay, bx, by, cx, cy, dx, dy);
-#else
-        double test = -1.;
-#endif
+        const unsigned long* dl = &d->integer_vertices[2 * vt2_0];
+        const double* dd = &d->rescaled_vertices[2 * vt2_0];
 
-        unsigned long dix = d->integer_vertices[2 * vt2_0];
-        unsigned long diy = d->integer_vertices[2 * vt2_0 + 1];
+        int testi = geometry2d_in_sphere_adaptive(&d->geometry, al, bl, cl, dl,
+                                                  ad, bd, cd, dd);
 
-        int testi = geometry2d_in_sphere_exact(&d->geometry, aix, aiy, bix, biy,
-                                               cix, ciy, dix, diy);
-        if (test > 0. || testi > 0) {
+        if (testi > 0.) {
           fprintf(stderr, "Wrong triangle!\n");
           fprintf(stderr, "Triangle %i: %i (%g %g) %i (%g %g) %i (%g %g)\n", i,
                   vt1_0, d->vertices[2 * vt1_0], d->vertices[2 * vt1_0 + 1],
@@ -1259,11 +1187,7 @@ inline static void delaunay_check_tessellation(struct delaunay* restrict d) {
                   vt1_2, d->vertices[2 * vt1_2], d->vertices[2 * vt1_2 + 1]);
           fprintf(stderr, "Opposite vertex: %i (%g %g)\n", vt2_0,
                   d->vertices[2 * vt2_0], d->vertices[2 * vt2_0 + 1]);
-          fprintf(stderr, "Test result: %g\n", test);
-#ifdef DELAUNAY_NONEXACT
-          fprintf(stderr, "Orientation: %g\n",
-                  geometry2d_orient(ax, ay, bx, by, cx, cy));
-#endif
+          fprintf(stderr, "Test result: %g\n", testi);
           abort();
         }
       }

@@ -56,13 +56,11 @@ struct delaunay {
    *  main() and we probably want to get rid of it in a SWIFT implementation. */
   double* vertices;
 
-#ifdef DELAUNAY_NONEXACT
   /*! @brief Vertex positions, rescaled to the range 1-2. Kept here in case we
    *  want to adopt hybrid geometrical checks (floating point checks when safe,
    *  integer checks when there is a risk of numerical error leading to the
    *  wrong result) to speed things up. */
   double* rescaled_vertices;
-#endif
 
   /*! @brief Integer vertex_indices. These are the vertex coordinates that are
    *  actually used during the incremental construction. */
@@ -186,9 +184,7 @@ inline static void delaunay_init(struct delaunay* restrict d,
                                  int vertex_size, int tetrahedron_size) {
   /* allocate memory for all the arrays and queues */
   d->vertices = (double*)malloc(vertex_size * 3 * sizeof(double));
-#ifdef DELAUNAY_NONEXACT
   d->rescaled_vertices = (double*)malloc(vertex_size * 3 * sizeof(double));
-#endif
   d->integer_vertices =
       (unsigned long int*)malloc(vertex_size * 3 * sizeof(unsigned long int));
   d->vertex_tetrahedron_links = (int*)malloc(vertex_size * sizeof(int));
@@ -289,9 +285,7 @@ inline static void delaunay_init(struct delaunay* restrict d,
 
 inline static void delaunay_destroy(struct delaunay* restrict d) {
   free(d->vertices);
-#ifdef DELAUNAY_NONEXACT
   free(d->rescaled_vertices);
-#endif
   free(d->integer_vertices);
   free(d->vertex_tetrahedron_links);
   free(d->vertex_tetrahedron_index);
@@ -384,12 +378,10 @@ inline static void delaunay_init_vertex(struct delaunay* restrict d,
   delaunay_assert(rescaled_z >= 1.);
   delaunay_assert(rescaled_z < 2.);
 
-#ifdef DELAUNAY_NONEXACT
   /* store a copy of the rescaled coordinates to apply non-exact tests */
   d->rescaled_vertices[3 * v] = rescaled_x;
   d->rescaled_vertices[3 * v + 1] = rescaled_y;
   d->rescaled_vertices[3 * v + 2] = rescaled_z;
-#endif
 
   /* convert the rescaled coordinates to integer coordinates and store these */
   d->integer_vertices[3 * v] = delaunay_double_to_int(rescaled_x);
@@ -431,10 +423,8 @@ inline static int delaunay_new_vertex(struct delaunay* restrict d, double x,
     d->vertex_size <<= 1;
     d->vertices =
         (double*)realloc(d->vertices, d->vertex_size * 3 * sizeof(double));
-#ifdef DELAUNAY_NONEXACT
     d->rescaled_vertices = (double*)realloc(
         d->rescaled_vertices, d->vertex_size * 3 * sizeof(double));
-#endif
     d->integer_vertices = (unsigned long int*)realloc(
         d->integer_vertices, d->vertex_size * 3 * sizeof(unsigned long int));
     d->vertex_tetrahedron_links = (int*)realloc(d->vertex_tetrahedron_links,
@@ -560,36 +550,24 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
     const int v1 = tetrahedron->vertices[1];
     const int v2 = tetrahedron->vertices[2];
     const int v3 = tetrahedron->vertices[3];
-    /* Get the coordinates of the vertex_indices of the tetrahedron */
-    const unsigned long aiy = d->integer_vertices[3 * v0 + 1];
-    const unsigned long aiz = d->integer_vertices[3 * v0 + 2];
 
-    const unsigned long bix = d->integer_vertices[3 * v1];
-    const unsigned long biy = d->integer_vertices[3 * v1 + 1];
-    const unsigned long biz = d->integer_vertices[3 * v1 + 2];
+    /* Get pointers to the coordinates of the vertices */
+    const unsigned long* al = &d->integer_vertices[3 * v0];
+    const unsigned long* bl = &d->integer_vertices[3 * v1];
+    const unsigned long* cl = &d->integer_vertices[3 * v2];
+    const unsigned long* dl = &d->integer_vertices[3 * v3];
+    const unsigned long* el = &d->integer_vertices[3 * v];
 
-    const unsigned long cix = d->integer_vertices[3 * v2];
-    const unsigned long ciy = d->integer_vertices[3 * v2 + 1];
-    const unsigned long ciz = d->integer_vertices[3 * v2 + 2];
+    const double* ad = &d->rescaled_vertices[3 * v0];
+    const double* bd = &d->rescaled_vertices[3 * v1];
+    const double* cd = &d->rescaled_vertices[3 * v2];
+    const double* dd = &d->rescaled_vertices[3 * v3];
+    const double* ed = &d->rescaled_vertices[3 * v];
 
-    const unsigned long dix = d->integer_vertices[3 * v3];
-    const unsigned long diy = d->integer_vertices[3 * v3 + 1];
-    const unsigned long diz = d->integer_vertices[3 * v3 + 2];
-
-    /* Get the coordinates of the test vertex */
-    const unsigned long eix = d->integer_vertices[3 * v];
-    const unsigned long eiy = d->integer_vertices[3 * v + 1];
-    const unsigned long eiz = d->integer_vertices[3 * v + 2];
-
-#ifdef DELAUNAY_NONEXACT
-    // TODO get non-exact coordinates
-#endif
-
-    const unsigned long aix = d->integer_vertices[3 * v0];
 #ifdef DELAUNAY_CHECKS
     /* made sure the tetrahedron is correctly oriented */
-    if (geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz, cix,
-                                ciy, ciz, dix, diy, diz) >= 0) {
+    if (geometry3d_orient_adaptive(&d->geometry, al, bl, cl, dl, ad, bd, cd,
+                                   dd) >= 0) {
       fprintf(stderr, "Incorrect orientation for tetrahedron %i!",
               tetrahedron_idx);
       abort();
@@ -597,33 +575,29 @@ inline static int delaunay_find_tetrahedra_containing_vertex(
 #endif
     int non_axis_v_idx[2];
     /* Check whether the point is inside or outside all four faces */
-    const int test_abce =
-        geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz, cix,
-                                ciy, ciz, eix, eiy, eiz);
+    const int test_abce = geometry3d_orient_adaptive(&d->geometry, al, bl, cl,
+                                                     el, ad, bd, cd, ed);
     if (test_abce > 0) {
       /* v outside face opposite of v3 */
       tetrahedron_idx = tetrahedron->neighbours[3];
       continue;
     }
-    const int test_acde =
-        geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, cix, ciy, ciz, dix,
-                                diy, diz, eix, eiy, eiz);
+    const int test_acde = geometry3d_orient_adaptive(&d->geometry, al, cl, dl,
+                                                     el, ad, cd, dd, ed);
     if (test_acde > 0) {
       /* v outside face opposite of v1 */
       tetrahedron_idx = tetrahedron->neighbours[1];
       continue;
     }
-    const int test_adbe =
-        geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, dix, diy, diz, bix,
-                                biy, biz, eix, eiy, eiz);
+    const int test_adbe = geometry3d_orient_adaptive(&d->geometry, al, dl, bl,
+                                                     el, ad, dd, bd, ed);
     if (test_adbe > 0) {
       /* v outside face opposite of v2 */
       tetrahedron_idx = tetrahedron->neighbours[2];
       continue;
     }
-    const int test_bdce =
-        geometry3d_orient_exact(&d->geometry, bix, biy, biz, dix, diy, diz, cix,
-                                ciy, ciz, eix, eiy, eiz);
+    const int test_bdce = geometry3d_orient_adaptive(&d->geometry, bl, dl, cl,
+                                                     el, bd, dd, cd, ed);
     if (test_bdce > 0) {
       /* v outside face opposite of v0 */
       tetrahedron_idx = tetrahedron->neighbours[0];
@@ -1585,51 +1559,39 @@ inline static int delaunay_check_tetrahedron(struct delaunay* d, const int t,
   }
 
   /* Get the coordinates of all vertex_indices */
-#ifdef DELAUNAY_NONEXACT
-  // TODO
-#endif
-  const unsigned long aix = d->integer_vertices[3 * v0];
-  const unsigned long aiy = d->integer_vertices[3 * v0 + 1];
-  const unsigned long aiz = d->integer_vertices[3 * v0 + 2];
+  const unsigned long* al = &d->integer_vertices[3 * v0];
+  const unsigned long* bl = &d->integer_vertices[3 * v1];
+  const unsigned long* cl = &d->integer_vertices[3 * v2];
+  const unsigned long* dl = &d->integer_vertices[3 * v3];
+  const unsigned long* el = &d->integer_vertices[3 * v4];
 
-  const unsigned long bix = d->integer_vertices[3 * v1];
-  const unsigned long biy = d->integer_vertices[3 * v1 + 1];
-  const unsigned long biz = d->integer_vertices[3 * v1 + 2];
+  const double* ad = &d->rescaled_vertices[3 * v0];
+  const double* bd = &d->rescaled_vertices[3 * v1];
+  const double* cd = &d->rescaled_vertices[3 * v2];
+  const double* dd = &d->rescaled_vertices[3 * v3];
+  const double* ed = &d->rescaled_vertices[3 * v4];
 
-  const unsigned long cix = d->integer_vertices[3 * v2];
-  const unsigned long ciy = d->integer_vertices[3 * v2 + 1];
-  const unsigned long ciz = d->integer_vertices[3 * v2 + 2];
-
-  const unsigned long dix = d->integer_vertices[3 * v3];
-  const unsigned long diy = d->integer_vertices[3 * v3 + 1];
-  const unsigned long diz = d->integer_vertices[3 * v3 + 2];
-
-  const unsigned long eix = d->integer_vertices[3 * v4];
-  const unsigned long eiy = d->integer_vertices[3 * v4 + 1];
-  const unsigned long eiz = d->integer_vertices[3 * v4 + 2];
-
-  const int test =
-      geometry3d_in_sphere_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz,
-                                 cix, ciy, ciz, dix, diy, diz, eix, eiy, eiz);
+  const int test = geometry3d_in_sphere_adaptive(&d->geometry, al, bl, cl, dl,
+                                                 el, ad, bd, cd, dd, ed);
   if (test < 0) {
     delaunay_log("Tetrahedron %i was invalidated by adding vertex %i", t, v);
     /* Figure out which flip is needed to restore the tetrahedra */
     int tests[4] = {-1, -1, -1, -1};
     if (top != 3) {
-      tests[0] = geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy,
-                                         biz, cix, ciy, ciz, eix, eiy, eiz);
+      tests[0] = geometry3d_orient_adaptive(&d->geometry, al, bl, cl, el, ad,
+                                            bd, cd, ed);
     }
     if (top != 2) {
-      tests[1] = geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy,
-                                         biz, eix, eiy, eiz, dix, diy, diz);
+      tests[1] = geometry3d_orient_adaptive(&d->geometry, al, bl, el, dl, ad,
+                                            bd, ed, dd);
     }
     if (top != 1) {
-      tests[2] = geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, eix, eiy,
-                                         eiz, cix, ciy, ciz, dix, diy, diz);
+      tests[2] = geometry3d_orient_adaptive(&d->geometry, al, el, cl, dl, ad,
+                                            ed, cd, dd);
     }
     if (top != 0) {
-      tests[3] = geometry3d_orient_exact(&d->geometry, eix, eiy, eiz, bix, biy,
-                                         biz, cix, ciy, ciz, dix, diy, diz);
+      tests[3] = geometry3d_orient_adaptive(&d->geometry, el, bl, cl, dl, ed,
+                                            bd, cd, dd);
     }
     int i;
     for (i = 0; i < 4 && tests[i] < 0; ++i) {
@@ -1945,24 +1907,11 @@ inline static void delaunay_print_tessellation(
 
 inline static int delaunay_test_orientation(struct delaunay* restrict d, int v0,
                                             int v1, int v2, int v3) {
-  const unsigned long aix = d->integer_vertices[3 * v0];
-  const unsigned long aiy = d->integer_vertices[3 * v0 + 1];
-  const unsigned long aiz = d->integer_vertices[3 * v0 + 2];
-
-  const unsigned long bix = d->integer_vertices[3 * v1];
-  const unsigned long biy = d->integer_vertices[3 * v1 + 1];
-  const unsigned long biz = d->integer_vertices[3 * v1 + 2];
-
-  const unsigned long cix = d->integer_vertices[3 * v2];
-  const unsigned long ciy = d->integer_vertices[3 * v2 + 1];
-  const unsigned long ciz = d->integer_vertices[3 * v2 + 2];
-
-  const unsigned long dix = d->integer_vertices[3 * v3];
-  const unsigned long diy = d->integer_vertices[3 * v3 + 1];
-  const unsigned long diz = d->integer_vertices[3 * v3 + 2];
-
-  return geometry3d_orient_exact(&d->geometry, aix, aiy, aiz, bix, biy, biz,
-                                 cix, ciy, ciz, dix, diy, diz);
+  return geometry3d_orient_adaptive(
+          &d->geometry, &d->integer_vertices[3 * v0], &d->integer_vertices[3 * v1],
+          &d->integer_vertices[3 * v2], &d->integer_vertices[3 * v3],
+          &d->rescaled_vertices[3 * v0], &d->rescaled_vertices[3 * v1],
+          &d->rescaled_vertices[3 * v2], &d->rescaled_vertices[3 * v3]);
 }
 
 /**
