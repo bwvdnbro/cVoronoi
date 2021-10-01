@@ -39,7 +39,7 @@ inline static void delaunay_n_to_2n_flip(struct delaunay* d, int v,
 inline static void delaunay_check_tetrahedra(struct delaunay* d, int v);
 inline static int delaunay_check_tetrahedron(struct delaunay* d, int t, int v);
 inline static int positive_permutation(int a, int b, int c, int d);
-inline static double delaunay_get_radius(const struct delaunay* restrict d,
+inline static double delaunay_get_radius(struct delaunay* restrict d,
                                          int t);
 inline static int delaunay_test_orientation(struct delaunay* restrict d, int v0,
                                             int v1, int v2, int v3);
@@ -48,6 +48,9 @@ struct delaunay {
 
   /*! @brief Anchor of the simulation volume. */
   double anchor[3];
+
+  /*! @brief Side length of the simulation volume. */
+  double side;
 
   /*! @brief Inverse side length of the simulation volume. */
   double inverse_side;
@@ -234,6 +237,7 @@ inline static void delaunay_init(struct delaunay* restrict d,
   /* the 1.e-13 makes sure converted values are in the range [1, 2[ instead of
    * [1,2] (unlike Springel, 2010) */
   d->inverse_side = (1. - 1.e-13) / box_side;
+  d->side = box_side;
 
   /* initialise the structure used to perform exact geometrical tests */
   geometry3d_init(&d->geometry);
@@ -1674,35 +1678,24 @@ inline static int delaunay_check_tetrahedron(struct delaunay* d, const int t,
  * @param t Tetrahedron index.
  * @return Radius of the circumsphere of the given tetrahedron.
  */
-inline static double delaunay_get_radius(const struct delaunay* restrict d,
+inline static double delaunay_get_radius(struct delaunay* restrict d,
                                          int t) {
   int v0 = d->tetrahedra[t].vertices[0];
   int v1 = d->tetrahedra[t].vertices[1];
   int v2 = d->tetrahedra[t].vertices[2];
   int v3 = d->tetrahedra[t].vertices[3];
 
-  double v0x = d->vertices[3 * v0];
-  double v0y = d->vertices[3 * v0 + 1];
-  double v0z = d->vertices[3 * v0 + 2];
-  double v1x = d->vertices[3 * v1];
-  double v1y = d->vertices[3 * v1 + 1];
-  double v1z = d->vertices[3 * v1 + 2];
-  double v2x = d->vertices[3 * v2];
-  double v2y = d->vertices[3 * v2 + 1];
-  double v2z = d->vertices[3 * v2 + 2];
-  double v3x = d->vertices[3 * v3];
-  double v3y = d->vertices[3 * v3 + 1];
-  double v3z = d->vertices[3 * v3 + 2];
+  double* v0d = &d->rescaled_vertices[3 * v0];
+  double* v1d = &d->rescaled_vertices[3 * v1];
+  double* v2d = &d->rescaled_vertices[3 * v2];
+  double* v3d = &d->rescaled_vertices[3 * v3];
+  unsigned long* v0ul = &d->integer_vertices[3 * v0];
+  unsigned long* v1ul = &d->integer_vertices[3 * v1];
+  unsigned long* v2ul = &d->integer_vertices[3 * v2];
+  unsigned long* v3ul = &d->integer_vertices[3 * v3];
 
-  double circumcenter[3];
-  geometry3d_compute_circumcenter(v0x, v0y, v0z, v1x, v1y, v1z, v2x, v2y, v2z,
-                                  v3x, v3y, v3z, circumcenter);
-
-  double Rx = circumcenter[0] - v0x;
-  double Ry = circumcenter[1] - v0y;
-  double Rz = circumcenter[2] - v0z;
-
-  return sqrt(Rx * Rx + Ry * Ry + Rz * Rz);
+  return geometry3d_compute_circumradius_adaptive(
+          &d->geometry, v0d, v1d, v2d, v3d, v0ul, v1ul, v2ul, v3ul, d->side);
 }
 
 inline static double delaunay_get_search_radius(struct delaunay* restrict d,
