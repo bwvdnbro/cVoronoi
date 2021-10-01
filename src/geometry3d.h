@@ -14,6 +14,7 @@
 #include <gmp.h>
 #include <math.h>
 #include <assert.h>
+#include <stdio.h>
 
 #include "ray.h"
 
@@ -839,11 +840,9 @@ inline static double geometry3d_compute_centroid_volume_tetrahedron(
 }
 
 inline static double geometry3d_compute_centroid_area(
-        const double* restrict points, int n_points, double* result) {
+        const double *restrict points, int n_points, double *result) {
 
-  if (n_points < 2) {
-    error("Must pass at least 3 points!");
-  }
+  assert(n_points > 2);
 
   /* Calculate area and centroid from triangles (more robust) */
   double area = 0.;
@@ -875,8 +874,8 @@ inline static double geometry3d_compute_centroid_area(
   return area;
 }
 
-inline static void geometry3d_cross(const double* v1, const double* v2,
-                                    double* restrict out_cross) {
+inline static void geometry3d_cross(const double *v1, const double *v2,
+                                    double *restrict out_cross) {
   out_cross[0] = v1[1] * v2[2] - v1[2] * v2[1];
   out_cross[1] = v2[0] * v1[2] - v2[2] * v1[0];
   out_cross[2] = v1[0] * v2[1] - v1[1] * v2[0];
