@@ -7,14 +7,60 @@
 #include "delaunay.h"
 #include "geometry3d.h"
 
+inline static void get_rand_vec(double *v) {
+  v[0] = (double) rand() / INT_MAX + 1.;
+  v[1] = (double) rand() / INT_MAX + 1.;
+  v[2] = (double) rand() / INT_MAX + 1.;
+}
+
 inline static void test_circumcenter() {
-  double circumcenter[3];
-  geometry3d_compute_circumcenter_relative_non_exact(0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 1,
-                                  circumcenter);
-  if (circumcenter[0] != 0.5 || circumcenter[1] != 0.5 ||
-      circumcenter[2] != 0.5) {
-    abort();
+  double p0[3], p1[3], p2[3], p3[3], c[3];
+  unsigned long p0ul[3], p1ul[3], p2ul[3], p3ul[3];
+
+  geometry3d_compute_circumcenter_relative_non_exact(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, c);
+  assert(c[0] == 0.5 && c[1] == 0.5 && c[2] == 0.5);
+
+  struct geometry3d g;
+  geometry3d_init(&g);
+
+  for (int l = 0; l < 10000; l++) {
+    get_rand_vec(p0);
+    get_rand_vec(p1);
+    get_rand_vec(p2);
+    get_rand_vec(p3);
+
+    for (int i = 0; i < 3; i++) {
+      p0ul[i] = delaunay_double_to_int(p0[i]);
+      p1ul[i] = delaunay_double_to_int(p1[i]);
+      p2ul[i] = delaunay_double_to_int(p2[i]);
+      p3ul[i] = delaunay_double_to_int(p3[i]);
+    }
+    double ce[3];
+    geometry3d_compute_circumcenter_relative_exact(&g, p0ul[0], p0ul[1], p0ul[2], p1ul[0], p1ul[1], p1ul[2], p2ul[0],
+                                                   p2ul[1], p2ul[2], p3ul[0], p3ul[1], p3ul[2], ce);
+    geometry3d_compute_circumcenter_relative_adaptive(&g, p0, p1, p2, p3, p0ul, p1ul, p2ul, p3ul, c);
+    assert(fabs(ce[0] - c[0]) / ce[0] < 1e-10 && fabs(ce[1] - c[1]) / ce[1] < 1e-10 && fabs(ce[2] - c[2]) / ce[2] < 1e-10);
+
+    c[0] += p0[0];
+    c[1] += p0[1];
+    c[2] += p0[2];
+
+    double radius = geometry3d_compute_circumradius_adaptive(&g, p0, p1, p2, p3, p0ul, p1ul, p2ul, p3ul, 1.);
+
+    double d0 = sqrt(
+            (c[0] - p0[0]) * (c[0] - p0[0]) + (c[1] - p0[1]) * (c[1] - p0[1]) + (c[2] - p0[2]) * (c[2] - p0[2]));
+    double d1 = sqrt(
+            (c[0] - p1[0]) * (c[0] - p1[0]) + (c[1] - p1[1]) * (c[1] - p1[1]) + (c[2] - p1[2]) * (c[2] - p1[2]));
+    double d2 = sqrt(
+            (c[0] - p2[0]) * (c[0] - p2[0]) + (c[1] - p2[1]) * (c[1] - p2[1]) + (c[2] - p2[2]) * (c[2] - p2[2]));
+    double d3 = sqrt(
+            (c[0] - p3[0]) * (c[0] - p3[0]) + (c[1] - p3[1]) * (c[1] - p3[1]) + (c[2] - p3[2]) * (c[2] - p3[2]));
+
+    assert(fabs(d0 - d1) / d0 < 1e-10 && fabs(d0 - d2) / d0 < 1e-10 && fabs(d0 - d3) / d0 < 1e-10 &&
+           fabs(d0 - radius) / d0 < 1e-10);
   }
+
+  geometry3d_destroy(&g);
 }
 
 inline static void test_area() {
@@ -37,8 +83,8 @@ inline static void test_area() {
 }
 
 inline static void test_orientation() {
-  struct geometry3d *g;
-  geometry3d_init(g);
+  struct geometry3d g;
+  geometry3d_init(&g);
 
   unsigned long al[3] = {0, 0, 0};
   unsigned long bl[3] = {0, 0, 1};
@@ -50,12 +96,12 @@ inline static void test_orientation() {
   double cd[3] = {0, 1, 0};
   double dd[3] = {1, 0, 0};
 
-  int orientation = geometry3d_orient_adaptive(g, al, bl, cl, dl, ad, bd, cd, dd);
+  int orientation = geometry3d_orient_adaptive(&g, al, bl, cl, dl, ad, bd, cd, dd);
   if (orientation != 1) {
     abort();
   }
 
-  geometry3d_destroy(g);
+  geometry3d_destroy(&g);
 }
 
 inline static void test_volume() {
@@ -104,7 +150,7 @@ inline static void test_volume() {
   delaunay_destroy(&d);
 }
 
-inline static void test_circumcenter_exact() {
+inline static void test_centroid_exact() {
   unsigned long p0[3] = {0, 0, 0};
   unsigned long p1[3] = {0, 0, 0};
   unsigned long p2[3] = {0, 20, 0};
@@ -116,13 +162,7 @@ inline static void test_circumcenter_exact() {
   unsigned long centroid[3];
   geometry3d_compute_centroid_tetrahedron_exact(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2], p3[0],
                                                 p3[1], p3[2], centroid);
-  assert(centroid[0] == (0ul-1) / 4 * 3 + 2 && centroid[1] == 5 && centroid[2] == 7);
-}
-
-inline static void get_rand_vec(double* v) {
-  v[0] = (double)rand() / INT_MAX + 1.;
-  v[1] = (double)rand() / INT_MAX + 1.;
-  v[2] = (double)rand() / INT_MAX + 1.;
+  assert(centroid[0] == (0ul - 1) / 4 * 3 + 2 && centroid[1] == 5 && centroid[2] == 7);
 }
 
 inline static void test_ray_triangle_intersection() {
@@ -157,7 +197,7 @@ inline static void test_ray_triangle_intersection() {
   assert(fabs(distance - distance_exact) / distance < 1e-10);
 
   /* Now again for random points */
-  for (int i = 0; i < 1000000; i++) {
+  for (int i = 0; i < 10000; i++) {
     get_rand_vec(p0);
     get_rand_vec(p1);
     get_rand_vec(p2);
@@ -195,5 +235,5 @@ int main(int argc, char **argv) {
   test_volume();
   test_orientation();
   test_ray_triangle_intersection();
-  test_circumcenter_exact();
+  test_centroid_exact();
 }

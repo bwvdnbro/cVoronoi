@@ -669,6 +669,7 @@ static inline void geometry3d_compute_circumcenter_relative_exact(
   circumcenter[2] = mpf_get_d(g->frac_result) / 0x10000000000000llu;
 }
 
+/*! @brief Compute circumcenter relative to v0 */
 static inline void geometry3d_compute_circumcenter_relative_adaptive(
         struct geometry3d *restrict g, const double *restrict v0,
         const double *restrict v1, const double *restrict v2,
