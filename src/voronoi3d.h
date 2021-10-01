@@ -214,65 +214,63 @@ inline static void voronoi_init(struct voronoi *restrict v,
     /* Extract coordinates from the Delaunay vertices (generators)
      * FUTURE NOTE: In swift we should read this from the particles themselves!
      * */
-    double v0x, v0y, v0z, v1x, v1y, v1z, v2x, v2y, v2z, v3x, v3y, v3z;
+    double *v0d, *v1d, *v2d, *v3d;
+    unsigned long *v0ul, *v1ul, *v2ul, *v3ul;
     if (v0 < d->vertex_end || v0 >= d->ghost_offset) {
-      v0x = d->vertices[3 * v0];
-      v0y = d->vertices[3 * v0 + 1];
-      v0z = d->vertices[3 * v0 + 2];
+      v0d = &d->rescaled_vertices[3 * v0];
+      v0ul = &d->integer_vertices[3 * v0];
     } else {
       /* This could mean that a neighbouring cell of this grids cell is empty!
        * Or that we did not add all the necessary ghost vertex_indices to the
        * delaunay tesselation. */
       voronoi_error(
-          "Vertex is part of tetrahedron with Dummy vertex! This could mean "
-          "that one of the neighbouring cells is empty.");
+              "Vertex is part of tetrahedron with Dummy vertex! This could mean "
+              "that one of the neighbouring cells is empty.");
     }
     if (v1 < d->vertex_end || v1 >= d->ghost_offset) {
-      v1x = d->vertices[3 * v1];
-      v1y = d->vertices[3 * v1 + 1];
-      v1z = d->vertices[3 * v1 + 2];
+      v1d = &d->rescaled_vertices[3 * v1];
+      v1ul = &d->integer_vertices[3 * v1];
     } else {
       voronoi_error(
-          "Vertex is part of tetrahedron with Dummy vertex! This could mean "
-          "that one of the neighbouring cells is empty.");
+              "Vertex is part of tetrahedron with Dummy vertex! This could mean "
+              "that one of the neighbouring cells is empty.");
     }
     if (v2 < d->vertex_end || v2 >= d->ghost_offset) {
-      v2x = d->vertices[3 * v2];
-      v2y = d->vertices[3 * v2 + 1];
-      v2z = d->vertices[3 * v2 + 2];
+      v2d = &d->rescaled_vertices[3 * v2];
+      v2ul = &d->integer_vertices[3 * v2];
     } else {
       voronoi_error(
-          "Vertex is part of tetrahedron with Dummy vertex! This could mean "
-          "that "
-          "one of the neighbouring cells is empty.");
+              "Vertex is part of tetrahedron with Dummy vertex! This could mean "
+              "that "
+              "one of the neighbouring cells is empty.");
     }
     if (v3 < d->vertex_end || v3 >= d->ghost_offset) {
-      v3x = d->vertices[3 * v3];
-      v3y = d->vertices[3 * v3 + 1];
-      v3z = d->vertices[3 * v3 + 2];
+      v3d = &d->rescaled_vertices[3 * v3];
+      v3ul = &d->integer_vertices[3 * v3];
     } else {
       voronoi_error(
-          "Vertex is part of tetrahedron with Dummy vertex! This could mean "
-          "that one of the neighbouring cells is empty.");
+              "Vertex is part of tetrahedron with Dummy vertex! This could mean "
+              "that one of the neighbouring cells is empty.");
     }
 
-    geometry3d_compute_circumcenter(v0x, v0y, v0z, v1x, v1y, v1z, v2x, v2y, v2z,
-                                    v3x, v3y, v3z, &voronoi_vertices[3 * i]);
+    geometry3d_compute_circumcenter_adaptive(
+            &d->geometry, v0d, v1d, v2d, v3d, v0ul, v1ul, v2ul, v3ul,
+            &voronoi_vertices[3 * i], d->side, d->anchor);
 #ifdef VORONOI_CHECKS
     const double cx = voronoi_vertices[3 * i];
     const double cy = voronoi_vertices[3 * i + 1];
     const double cz = voronoi_vertices[3 * i + 2];
 
-    const double r0 = (cx - v0x) * (cx - v0x) + (cy - v0y) * (cy - v0y) +
-                      (cz - v0z) * (cz - v0z);
-    const double r1 = (cx - v1x) * (cx - v1x) + (cy - v1y) * (cy - v1y) +
-                      (cz - v1z) * (cz - v1z);
-    const double r2 = (cx - v2x) * (cx - v2x) + (cy - v2y) * (cy - v2y) +
-                      (cz - v2z) * (cz - v2z);
-    const double r3 = (cx - v3x) * (cx - v3x) + (cy - v3y) * (cy - v3y) +
-                      (cz - v3z) * (cz - v3z);
-    voronoi_assert(double_cmp(r0, r1, 1e10) && double_cmp(r0, r2, 1e10) &&
-                   double_cmp(r0, r3, 1e10));
+    const double r0 = (cx - v0d[0]) * (cx - v0d[0]) + (cy - v0d[1]) * (cy - v0d[1]) +
+                      (cz - v0d[2]) * (cz - v0d[2]);
+    const double r1 = (cx - v1d[0]) * (cx - v1d[0]) + (cy - v1d[1]) * (cy - v1d[1]) +
+                      (cz - v1d[2]) * (cz - v1d[2]);
+    const double r2 = (cx - v2d[0]) * (cx - v2d[0]) + (cy - v2d[1]) * (cy - v2d[1]) +
+                      (cz - v2d[2]) * (cz - v2d[2]);
+    const double r3 = (cx - v3d[0]) * (cx - v3d[0]) + (cy - v3d[1]) * (cy - v3d[1]) +
+                      (cz - v3d[2]) * (cz - v3d[2]);
+    voronoi_assert(double_cmp(r0, r1, 1e5) && double_cmp(r0, r2, 1e5) &&
+                   double_cmp(r0, r3, 1e5));
 #endif
   } /* loop over the Delaunay tetrahedra and compute the circumcenters */
 

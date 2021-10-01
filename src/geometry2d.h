@@ -30,6 +30,7 @@
 
 #include <gmp.h>
 #include <math.h>
+#include <float.h>
 
 #include "utils.h"
 

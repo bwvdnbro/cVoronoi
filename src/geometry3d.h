@@ -13,6 +13,9 @@
 
 #include <gmp.h>
 #include <math.h>
+#include <assert.h>
+
+#include "ray.h"
 
 /**
  * @brief Auxiliary variables used by the arbirary exact tests. Since allocating
@@ -22,17 +25,20 @@
 struct geometry3d {
   /*! @brief Arbitrary exact vertex coordinates */
   mpz_t aix, aiy, aiz, bix, biy, biz, cix, ciy, ciz, dix, diy, diz, eix, eiy,
-      eiz;
+          eiz;
 
   /*! @brief Temporary variables used to store relative vertex coordinates. */
   mpz_t s1x, s1y, s1z, s2x, s2y, s2z, s3x, s3y, s3z, s4x, s4y, s4z;
 
   /*! @brief Temporary variables used to store intermediate results. */
-  mpz_t tmp1, tmp2, ab, bc, cd, da, ac, bd;
+  mpz_t tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8;
 
   /*! @brief Temporary variable used to store final exact results, before their
    *  sign is evaluated and returned as a finite precision integer. */
   mpz_t result;
+
+  /*! @brief Temporary variable to store floating point values */
+  mpf_t frac_n, frac_d, frac_result;
 };
 
 /**
@@ -42,12 +48,13 @@ struct geometry3d {
  *
  * @param g Geometry object.
  */
-inline static void geometry3d_init(struct geometry3d* restrict g) {
+inline static void geometry3d_init(struct geometry3d *restrict g) {
   mpz_inits(g->aix, g->aiy, g->aiz, g->bix, g->biy, g->biz, g->cix, g->ciy,
             g->ciz, g->dix, g->diy, g->diz, g->eix, g->eiy, g->eiz, g->s1x,
             g->s1y, g->s1z, g->s2x, g->s2y, g->s2z, g->s3x, g->s3y, g->s3z,
-            g->s4x, g->s4y, g->s4z, g->tmp1, g->tmp2, g->ab, g->bc, g->cd,
-            g->da, g->ac, g->bd, g->result, NULL);
+            g->s4x, g->s4y, g->s4z, g->tmp1, g->tmp2, g->tmp3, g->tmp4, g->tmp5,
+            g->tmp6, g->tmp7, g->tmp8, g->result, NULL);
+  mpf_inits(g->frac_n, g->frac_d, g->frac_result, NULL);
 }
 
 /**
@@ -55,12 +62,13 @@ inline static void geometry3d_init(struct geometry3d* restrict g) {
  *
  * @param g Geometry object.
  */
-inline static void geometry3d_destroy(struct geometry3d* restrict g) {
+inline static void geometry3d_destroy(struct geometry3d *restrict g) {
   mpz_clears(g->aix, g->aiy, g->aiz, g->bix, g->biy, g->biz, g->cix, g->ciy,
              g->ciz, g->dix, g->diy, g->diz, g->eix, g->eiy, g->eiz, g->s1x,
              g->s1y, g->s1z, g->s2x, g->s2y, g->s2z, g->s3x, g->s3y, g->s3z,
-             g->s4x, g->s4y, g->s4z, g->tmp1, g->tmp2, g->ab, g->bc, g->cd,
-             g->da, g->ac, g->bd, g->result, NULL);
+             g->s4x, g->s4y, g->s4z, g->tmp1, g->tmp2, g->tmp3, g->tmp4,
+             g->tmp5, g->tmp6, g->tmp7, g->tmp8, g->result, NULL);
+  mpf_clears(g->frac_n, g->frac_d, g->frac_result, NULL);
 }
 
 /**
@@ -103,15 +111,15 @@ inline static int geometry3d_orient(const double ax, const double ay,
 
   /* Compute error bounds */
   double errbound = (fabs(bdxcdy) + fabs(cdxbdy)) * fabs(adz) +
-          (fabs(cdxady) + fabs(adxcdy)) * fabs(bdz) +
-          (fabs(adxbdy) + fabs(bdxady)) * fabs(cdz);
+                    (fabs(cdxady) + fabs(adxcdy)) * fabs(bdz) +
+                    (fabs(adxbdy) + fabs(bdxady)) * fabs(cdz);
   // not really the right factor (probably too large), but this will do
   //  errbound *= 1.e-10;
   errbound *= DBL_EPSILON * 4;
 
   /* Compute result */
   double result = adz * (bdxcdy - cdxbdy) + bdz * (cdxady - adxcdy) +
-          cdz * (adxbdy - bdxady);
+                  cdz * (adxbdy - bdxady);
   if (result < -errbound || result > errbound) {
     return sgn(result);
   }
@@ -139,11 +147,11 @@ inline static int geometry3d_orient(const double ax, const double ay,
  * @return -1, 0, or 1, depending on the orientation of the tetrahedron.
  */
 inline static int geometry3d_orient_exact(
-    struct geometry3d* g, const unsigned long ax, const unsigned long ay,
-    const unsigned long az, const unsigned long bx, const unsigned long by,
-    const unsigned long bz, const unsigned long cx, const unsigned long cy,
-    const unsigned long cz, const unsigned long dx, const unsigned long dy,
-    const unsigned long dz) {
+        struct geometry3d *g, const unsigned long ax, const unsigned long ay,
+        const unsigned long az, const unsigned long bx, const unsigned long by,
+        const unsigned long bz, const unsigned long cx, const unsigned long cy,
+        const unsigned long cz, const unsigned long dx, const unsigned long dy,
+        const unsigned long dz) {
 
   /* store the input coordinates into the temporary large integer variables */
   mpz_set_ui(g->aix, ax);
@@ -216,9 +224,9 @@ inline static int geometry3d_orient_exact(
  * test
  */
 inline static int geometry3d_orient_adaptive(
-        struct geometry3d* restrict g, const unsigned long* al,
-                const unsigned long* bl, const unsigned long* cl, const unsigned long* dl,
-                const double* ad, const double* bd, const double* cd, const double* dd) {
+        struct geometry3d *restrict g, const unsigned long *al,
+        const unsigned long *bl, const unsigned long *cl, const unsigned long *dl,
+        const double *ad, const double *bd, const double *cd, const double *dd) {
 
   int result = geometry3d_orient(ad[0], ad[1], ad[2], bd[0], bd[1], bd[2],
                                  cd[0], cd[1], cd[2], dd[0], dd[1], dd[2]);
@@ -304,21 +312,21 @@ inline static int geometry3d_in_sphere(
   const double dexbeyplus = fabs(dexbey);
 
   double errbound = ((cexdeyplus + dexceyplus) * bezplus +
-          (dexbeyplus + bexdeyplus) * cezplus +
-          (bexceyplus + cexbeyplus) * dezplus) *
-                  aenrm2 +
-                  ((dexaeyplus + aexdeyplus) * cezplus +
-                  (aexceyplus + cexaeyplus) * dezplus +
-                  (cexdeyplus + dexceyplus) * aezplus) *
-                  benrm2 +
-                  ((aexbeyplus + bexaeyplus) * dezplus +
-                  (bexdeyplus + dexbeyplus) * aezplus +
-                  (dexaeyplus + aexdeyplus) * bezplus) *
-                  cenrm2 +
-                  ((bexceyplus + cexbeyplus) * aezplus +
-                  (cexaeyplus + aexceyplus) * bezplus +
-                  (aexbeyplus + bexaeyplus) * cezplus) *
-                  denrm2;
+                     (dexbeyplus + bexdeyplus) * cezplus +
+                     (bexceyplus + cexbeyplus) * dezplus) *
+                    aenrm2 +
+                    ((dexaeyplus + aexdeyplus) * cezplus +
+                     (aexceyplus + cexaeyplus) * dezplus +
+                     (cexdeyplus + dexceyplus) * aezplus) *
+                    benrm2 +
+                    ((aexbeyplus + bexaeyplus) * dezplus +
+                     (bexdeyplus + dexbeyplus) * aezplus +
+                     (dexaeyplus + aexdeyplus) * bezplus) *
+                    cenrm2 +
+                    ((bexceyplus + cexbeyplus) * aezplus +
+                     (cexaeyplus + aexceyplus) * bezplus +
+                     (aexbeyplus + bexaeyplus) * cezplus) *
+                    denrm2;
   // not really the right factor (which is smaller), but this will do
   //  errbound *= 1.e-10;
   errbound *= DBL_EPSILON * 11;
@@ -350,12 +358,12 @@ inline static int geometry3d_in_sphere(
  * @return -1, 0, or 1, depending on the outcome of the geometric test
  */
 inline static int geometry3d_in_sphere_exact(
-    struct geometry3d* restrict g, const unsigned long ax,
-    const unsigned long ay, const unsigned long az, const unsigned long bx,
-    const unsigned long by, const unsigned long bz, const unsigned long cx,
-    const unsigned long cy, const unsigned long cz, const unsigned long dx,
-    const unsigned long dy, const unsigned long dz, const unsigned long ex,
-    const unsigned long ey, const unsigned long ez) {
+        struct geometry3d *restrict g, const unsigned long ax,
+        const unsigned long ay, const unsigned long az, const unsigned long bx,
+        const unsigned long by, const unsigned long bz, const unsigned long cx,
+        const unsigned long cy, const unsigned long cz, const unsigned long dx,
+        const unsigned long dy, const unsigned long dz, const unsigned long ex,
+        const unsigned long ey, const unsigned long ez) {
   /* store the input coordinates into the temporary large integer variables */
   mpz_set_ui(g->aix, ax);
   mpz_set_ui(g->aiy, ay);
@@ -395,23 +403,23 @@ inline static int geometry3d_in_sphere_exact(
   mpz_sub(g->s4z, g->diz, g->eiz);
 
   /* compute intermediate values */
-  mpz_mul(g->ab, g->s1x, g->s2y);
-  mpz_submul(g->ab, g->s2x, g->s1y);
+  mpz_mul(g->tmp3, g->s1x, g->s2y);
+  mpz_submul(g->tmp3, g->s2x, g->s1y);
 
-  mpz_mul(g->bc, g->s2x, g->s3y);
-  mpz_submul(g->bc, g->s3x, g->s2y);
+  mpz_mul(g->tmp4, g->s2x, g->s3y);
+  mpz_submul(g->tmp4, g->s3x, g->s2y);
 
-  mpz_mul(g->cd, g->s3x, g->s4y);
-  mpz_submul(g->cd, g->s4x, g->s3y);
+  mpz_mul(g->tmp5, g->s3x, g->s4y);
+  mpz_submul(g->tmp5, g->s4x, g->s3y);
 
-  mpz_mul(g->da, g->s4x, g->s1y);
-  mpz_submul(g->da, g->s1x, g->s4y);
+  mpz_mul(g->tmp6, g->s4x, g->s1y);
+  mpz_submul(g->tmp6, g->s1x, g->s4y);
 
-  mpz_mul(g->ac, g->s1x, g->s3y);
-  mpz_submul(g->ac, g->s3x, g->s1y);
+  mpz_mul(g->tmp7, g->s1x, g->s3y);
+  mpz_submul(g->tmp7, g->s3x, g->s1y);
 
-  mpz_mul(g->bd, g->s2x, g->s4y);
-  mpz_submul(g->bd, g->s4x, g->s2y);
+  mpz_mul(g->tmp8, g->s2x, g->s4y);
+  mpz_submul(g->tmp8, g->s4x, g->s2y);
 
   /* compute the result in 4 steps */
   mpz_set_ui(g->result, 0);
@@ -419,43 +427,43 @@ inline static int geometry3d_in_sphere_exact(
   mpz_mul(g->tmp1, g->s4x, g->s4x);
   mpz_addmul(g->tmp1, g->s4y, g->s4y);
   mpz_addmul(g->tmp1, g->s4z, g->s4z);
-  mpz_mul(g->tmp2, g->s1z, g->bc);
-  mpz_submul(g->tmp2, g->s2z, g->ac);
-  mpz_addmul(g->tmp2, g->s3z, g->ab);
+  mpz_mul(g->tmp2, g->s1z, g->tmp4);
+  mpz_submul(g->tmp2, g->s2z, g->tmp7);
+  mpz_addmul(g->tmp2, g->s3z, g->tmp3);
   mpz_addmul(g->result, g->tmp1, g->tmp2);
 
   mpz_mul(g->tmp1, g->s3x, g->s3x);
   mpz_addmul(g->tmp1, g->s3y, g->s3y);
   mpz_addmul(g->tmp1, g->s3z, g->s3z);
-  mpz_mul(g->tmp2, g->s4z, g->ab);
-  mpz_addmul(g->tmp2, g->s1z, g->bd);
-  mpz_addmul(g->tmp2, g->s2z, g->da);
+  mpz_mul(g->tmp2, g->s4z, g->tmp3);
+  mpz_addmul(g->tmp2, g->s1z, g->tmp8);
+  mpz_addmul(g->tmp2, g->s2z, g->tmp6);
   mpz_submul(g->result, g->tmp1, g->tmp2);
 
   mpz_mul(g->tmp1, g->s2x, g->s2x);
   mpz_addmul(g->tmp1, g->s2y, g->s2y);
   mpz_addmul(g->tmp1, g->s2z, g->s2z);
-  mpz_mul(g->tmp2, g->s3z, g->da);
-  mpz_addmul(g->tmp2, g->s4z, g->ac);
-  mpz_addmul(g->tmp2, g->s1z, g->cd);
+  mpz_mul(g->tmp2, g->s3z, g->tmp6);
+  mpz_addmul(g->tmp2, g->s4z, g->tmp7);
+  mpz_addmul(g->tmp2, g->s1z, g->tmp5);
   mpz_addmul(g->result, g->tmp1, g->tmp2);
 
   mpz_mul(g->tmp1, g->s1x, g->s1x);
   mpz_addmul(g->tmp1, g->s1y, g->s1y);
   mpz_addmul(g->tmp1, g->s1z, g->s1z);
-  mpz_mul(g->tmp2, g->s2z, g->cd);
-  mpz_submul(g->tmp2, g->s3z, g->bd);
-  mpz_addmul(g->tmp2, g->s4z, g->bc);
+  mpz_mul(g->tmp2, g->s2z, g->tmp5);
+  mpz_submul(g->tmp2, g->s3z, g->tmp8);
+  mpz_addmul(g->tmp2, g->s4z, g->tmp4);
   mpz_submul(g->result, g->tmp1, g->tmp2);
 
   return mpz_sgn(g->result);
 }
 
 inline static int geometry3d_in_sphere_adaptive(
-        struct geometry3d* restrict g, const unsigned long* al,
-                const unsigned long* bl, const unsigned long* cl, const unsigned long* dl,
-                const unsigned long* el, const double* ad, const double* bd,
-                const double* cd, const double* dd, const double* ed) {
+        struct geometry3d *restrict g, const unsigned long *al,
+        const unsigned long *bl, const unsigned long *cl, const unsigned long *dl,
+        const unsigned long *el, const double *ad, const double *bd,
+        const double *cd, const double *dd, const double *ed) {
 
   int result = geometry3d_in_sphere(ad[0], ad[1], ad[2], bd[0], bd[1], bd[2],
                                     cd[0], cd[1], cd[2], dd[0], dd[1], dd[2],
@@ -470,22 +478,14 @@ inline static int geometry3d_in_sphere_adaptive(
   return result;
 }
 
-/**
- * @brief Compute the coordinates of the circumcenter of the tetrahedron
- * (v0, v1, v2, v3).
- *
- * See https://mathworld.wolfram.com/Circumsphere.html
- *
- * @param v0x, v0y, v0z, v1x, v1y, v1z, v2x, v2y, v2z, v3x, v3y, v3z Coordinates
- * of the corners of the tetrahedron.
- * @param circumcenter (Returned) coordinates of center of circumsphere
- * @param Ry (Returned) y coordinate of center of circumsphere
- * @param Rz (Returned) z coordinate of center of circumsphere
- */
-static inline void geometry3d_compute_circumcenter(
-    double v0x, double v0y, double v0z, double v1x, double v1y, double v1z,
-    double v2x, double v2y, double v2z, double v3x, double v3y, double v3z,
-    double* circumcenter) {
+static inline int geometry3d_compute_circumcenter_relative_non_exact(
+        double v0x, double v0y, double v0z, double v1x, double v1y, double v1z,
+        double v2x, double v2y, double v2z, double v3x, double v3y, double v3z,
+        double *circumcenter) {
+
+  double errbound_factor = 1.e-10;
+  // double errbound_factor = DBL_EPSILON * 4;
+
   /* Compute relative coordinates */
   const double r1x = v1x - v0x;
   const double r1y = v1y - v0y;
@@ -502,24 +502,238 @@ static inline void geometry3d_compute_circumcenter(
   const double r2_sqrd = r2x * r2x + r2y * r2y + r2z * r2z;
   const double r3_sqrd = r3x * r3x + r3y * r3y + r3z * r3z;
 
-  const double Dx = r1_sqrd * (r2y * r3z - r3y * r2z) -
-                    r2_sqrd * (r1y * r3z - r3y * r1z) +
-                    r3_sqrd * (r1y * r2z - r2y * r1z);
-  const double Dy = -r1_sqrd * (r2x * r3z - r3x * r2z) +
-                    r2_sqrd * (r1x * r3z - r3x * r1z) -
-                    r3_sqrd * (r1x * r2z - r2x * r1z);
-  const double Dz = r1_sqrd * (r2x * r3y - r3x * r2y) -
-                    r2_sqrd * (r1x * r3y - r3x * r1y) +
-                    r3_sqrd * (r1x * r2y - r2x * r1y);
+  const double r2yr3z = r2y * r3z;
+  const double r3yr2z = r3y * r2z;
+  const double r1yr3z = r1y * r3z;
+  const double r3yr1z = r3y * r1z;
+  const double r1yr2z = r1y * r2z;
+  const double r2yr1z = r2y * r1z;
+  const double a = r1x * (r2yr3z - r3yr2z) - r2x * (r1yr3z - r3yr1z) +
+                   r3x * (r1yr2z - r2yr1z);
+  double errbound = fabs(r1x) * (fabs(r2yr3z) + fabs(r3yr2z)) +
+                    fabs(r2x) * (fabs(r1yr3z) + fabs(r3yr1z)) +
+                    fabs(r3x) * (fabs(r1yr2z) + fabs(r2yr1z));
+  errbound *= errbound_factor;
+  if (a >= -errbound && a <= errbound) return 0;
 
-  const double a = r1x * (r2y * r3z - r3y * r2z) -
-                   r2x * (r1y * r3z - r3y * r1z) +
-                   r3x * (r1y * r2z - r2y * r1z);
+  /* Compute Dx */
+  const double Dx = r1_sqrd * (r2yr3z - r3yr2z) - r2_sqrd * (r1yr3z - r3yr1z) +
+                    r3_sqrd * (r1yr2z - r2yr1z);
+  errbound = fabs(r1_sqrd) * (fabs(r2yr3z) - fabs(r3yr2z)) -
+             fabs(r2_sqrd) * (fabs(r1yr3z) - fabs(r3yr1z)) +
+             fabs(r3_sqrd) * (fabs(r1yr2z) - fabs(r2yr1z));
+  errbound *= errbound_factor;
+  if (Dx >= -errbound && Dx <= errbound) return 0;
+
+  /* Compute Dy */
+  const double r2xr3z = r2x * r3z;
+  const double r3xr2z = r3x * r2z;
+  const double r1xr3z = r1x * r3z;
+  const double r3xr1z = r3x * r1z;
+  const double r1xr2z = r1x * r2z;
+  const double r2xr1z = r2x * r1z;
+  const double Dy = -r1_sqrd * (r2xr3z - r3xr2z) + r2_sqrd * (r1xr3z - r3xr1z) -
+                    r3_sqrd * (r1xr2z - r2xr1z);
+  errbound = fabs(r1_sqrd) * (fabs(r2xr3z) - fabs(r3xr2z)) +
+             fabs(r2_sqrd) * (fabs(r1xr3z) - fabs(r3xr1z)) -
+             fabs(r3_sqrd) * (fabs(r1xr2z) - fabs(r2xr1z));
+  errbound *= errbound_factor;
+  if (Dy >= -errbound && Dy <= errbound) return 0;
+
+  /* Compute Dz */
+  const double r2xr3y = r2x * r3y;
+  const double r3xr2y = r3x * r2y;
+  const double r1xr3y = r1x * r3y;
+  const double r3xr1y = r3x * r1y;
+  const double r1xr2y = r1x * r2y;
+  const double r2xr1y = r2x * r1y;
+  const double Dz = r1_sqrd * (r2xr3y - r3xr2y) - r2_sqrd * (r1xr3y - r3xr1y) +
+                    r3_sqrd * (r1xr2y - r2xr1y);
+  errbound = fabs(r1_sqrd) * (fabs(r2xr3y) - fabs(r3xr2y)) -
+             fabs(r2_sqrd) * (fabs(r1xr3y) - fabs(r3xr1y)) +
+             fabs(r3_sqrd) * (fabs(r1xr2y) - fabs(r2xr1y));
+  errbound *= errbound_factor;
+  if (Dz >= -errbound && Dz <= errbound) return 0;
 
   const double denominator = 2. * a;
-  circumcenter[0] = Dx / denominator + v0x;
-  circumcenter[1] = Dy / denominator + v0y;
-  circumcenter[2] = Dz / denominator + v0z;
+  circumcenter[0] = Dx / denominator;
+  circumcenter[1] = Dy / denominator;
+  circumcenter[2] = Dz / denominator;
+  return 1;
+}
+
+static inline void geometry3d_compute_circumcenter_relative_exact(
+        struct geometry3d *g, unsigned long ax, unsigned long ay, unsigned long az,
+        unsigned long bx, unsigned long by, unsigned long bz, unsigned long cx,
+        unsigned long cy, unsigned long cz, unsigned long dx, unsigned long dy,
+        unsigned long dz, double *circumcenter) {
+  /* store the input coordinates into the temporary large integer variables */
+  mpz_set_ui(g->aix, ax);
+  mpz_set_ui(g->aiy, ay);
+  mpz_set_ui(g->aiz, az);
+
+  mpz_set_ui(g->bix, bx);
+  mpz_set_ui(g->biy, by);
+  mpz_set_ui(g->biz, bz);
+
+  mpz_set_ui(g->cix, cx);
+  mpz_set_ui(g->ciy, cy);
+  mpz_set_ui(g->ciz, cz);
+
+  mpz_set_ui(g->dix, dx);
+  mpz_set_ui(g->diy, dy);
+  mpz_set_ui(g->diz, dz);
+
+  /* compute large integer relative coordinates */
+  mpz_sub(g->s1x, g->bix, g->aix);
+  mpz_sub(g->s1y, g->biy, g->aiy);
+  mpz_sub(g->s1z, g->biz, g->aiz);
+
+  mpz_sub(g->s2x, g->cix, g->aix);
+  mpz_sub(g->s2y, g->ciy, g->aiy);
+  mpz_sub(g->s2z, g->ciz, g->aiz);
+
+  mpz_sub(g->s3x, g->dix, g->aix);
+  mpz_sub(g->s3y, g->diy, g->aiy);
+  mpz_sub(g->s3z, g->diz, g->aiz);
+
+  /* Calculate denominator (->frac_d) */
+  mpz_mul(g->tmp1, g->s2y, g->s3z);
+  mpz_submul(g->tmp1, g->s3y, g->s2z);
+  mpz_mul(g->tmp2, g->s1y, g->s3z);
+  mpz_submul(g->tmp2, g->s3y, g->s1z);
+  mpz_mul(g->tmp3, g->s1y, g->s2z);
+  mpz_submul(g->tmp3, g->s2y, g->s1z);
+
+  mpz_mul(g->tmp7, g->s1x, g->tmp1);
+  mpz_submul(g->tmp7, g->s2x, g->tmp2);
+  mpz_addmul(g->tmp7, g->s3x, g->tmp3);
+  mpz_mul_ui(g->tmp8, g->tmp7, 2);
+  assert(mpz_sgn(g->tmp8) != 0);
+  mpf_set_z(g->frac_d, g->tmp8);
+
+  /* Compute squared norm of relative coordinates */
+  mpz_mul(g->tmp4, g->s1x, g->s1x);
+  mpz_addmul(g->tmp4, g->s1y, g->s1y);
+  mpz_addmul(g->tmp4, g->s1z, g->s1z);
+  mpz_mul(g->tmp5, g->s2x, g->s2x);
+  mpz_addmul(g->tmp5, g->s2y, g->s2y);
+  mpz_addmul(g->tmp5, g->s2z, g->s2z);
+  mpz_mul(g->tmp6, g->s3x, g->s3x);
+  mpz_addmul(g->tmp6, g->s3y, g->s3y);
+  mpz_addmul(g->tmp6, g->s3z, g->s3z);
+
+  /* Calculate Dx (->frac_n) */
+  mpz_mul(g->tmp7, g->tmp4, g->tmp1);
+  mpz_submul(g->tmp7, g->tmp5, g->tmp2);
+  mpz_addmul(g->tmp7, g->tmp6, g->tmp3);
+  mpf_set_z(g->frac_n, g->tmp7);
+
+  /* Calculate circumcenter[0] */
+  mpf_div(g->frac_result, g->frac_n, g->frac_d);
+  circumcenter[0] = mpf_get_d(g->frac_result) / 0x10000000000000llu;
+
+  /* Calculate Dy (->frac_n) */
+  mpz_mul(g->tmp1, g->s2x, g->s3z);
+  mpz_submul(g->tmp1, g->s3x, g->s2z);
+  mpz_mul(g->tmp2, g->s1x, g->s3z);
+  mpz_submul(g->tmp2, g->s3x, g->s1z);
+  mpz_mul(g->tmp3, g->s1x, g->s2z);
+  mpz_submul(g->tmp3, g->s2x, g->s1z);
+
+  mpz_mul(g->tmp7, g->tmp5, g->tmp2);
+  mpz_submul(g->tmp7, g->tmp4, g->tmp1);
+  mpz_submul(g->tmp7, g->tmp6, g->tmp3);
+  mpf_set_z(g->frac_n, g->tmp7);
+
+  /* Calculate circumcenter[1] */
+  mpf_div(g->frac_result, g->frac_n, g->frac_d);
+  circumcenter[1] = mpf_get_d(g->frac_result) / 0x10000000000000llu;
+
+  /* Calculate Dz (->frac_n) */
+  mpz_mul(g->tmp1, g->s2x, g->s3y);
+  mpz_submul(g->tmp1, g->s3x, g->s2y);
+  mpz_mul(g->tmp2, g->s1x, g->s3y);
+  mpz_submul(g->tmp2, g->s3x, g->s1y);
+  mpz_mul(g->tmp3, g->s1x, g->s2y);
+  mpz_submul(g->tmp3, g->s2x, g->s1y);
+
+  mpz_mul(g->tmp7, g->tmp4, g->tmp1);
+  mpz_submul(g->tmp7, g->tmp5, g->tmp2);
+  mpz_addmul(g->tmp7, g->tmp6, g->tmp3);
+  mpf_set_z(g->frac_n, g->tmp7);
+
+  /* Calculate circumcenter[2] */
+  mpf_div(g->frac_result, g->frac_n, g->frac_d);
+  circumcenter[2] = mpf_get_d(g->frac_result) / 0x10000000000000llu;
+}
+
+static inline void geometry3d_compute_circumcenter_relative_adaptive(
+        struct geometry3d *restrict g, const double *restrict v0,
+        const double *restrict v1, const double *restrict v2,
+        const double *restrict v3, const unsigned long *restrict v0ul,
+        const unsigned long *restrict v1ul, const unsigned long *restrict v2ul,
+        const unsigned long *restrict v3ul, double *restrict circumcenter) {
+
+  int result_non_exact = geometry3d_compute_circumcenter_relative_non_exact(
+          v0[0], v0[1], v0[2], v1[0], v1[1], v1[2], v2[0], v2[1], v2[2], v3[0],
+          v3[1], v3[2], circumcenter);
+
+  if (!result_non_exact) {
+    geometry3d_compute_circumcenter_relative_exact(
+            g, v0ul[0], v0ul[1], v0ul[2], v1ul[0], v1ul[1], v1ul[2], v2ul[0],
+            v2ul[1], v2ul[2], v3ul[0], v3ul[1], v3ul[2], circumcenter);
+  }
+}
+
+/**
+ * @brief Compute the coordinates of the circumcenter of the tetrahedron
+ * (v0, v1, v2, v3).
+ *
+ * See https://mathworld.wolfram.com/Circumsphere.html
+ *
+ * @param v0, v1, v2, v3 Rescaled coordinates of the corners of the tetrahedron.
+ * @param v0ul, v1ul, v2ul, v3ul Integer coordinates of the corners of the
+ * tetrahedron.
+ * @param circumcenter (Returned) coordinates of center of circumsphere
+ * @param box_side Side of box used to rescale coordinates
+ * @param box_anchor Anchor of box used to rescale coordinates
+ */
+static inline void geometry3d_compute_circumcenter_adaptive(
+        struct geometry3d *restrict g, const double *restrict v0,
+        const double *restrict v1, const double *restrict v2,
+        const double *restrict v3, const unsigned long *restrict v0ul,
+        const unsigned long *restrict v1ul, const unsigned long *restrict v2ul,
+        const unsigned long *restrict v3ul, double *restrict circumcenter,
+        double box_side, const double *restrict box_anchor) {
+
+  /* Calculate relative circumcenter (relative to v0, rescaled coordinates) */
+  geometry3d_compute_circumcenter_relative_adaptive(
+          g, v0, v1, v2, v3, v0ul, v1ul, v2ul, v3ul, circumcenter);
+
+  /* Translate and rescale circumcenter */
+  circumcenter[0] = (circumcenter[0] + v0[0] - 1.) * box_side + box_anchor[0];
+  circumcenter[1] = (circumcenter[1] + v0[1] - 1.) * box_side + box_anchor[1];
+  circumcenter[2] = (circumcenter[2] + v0[2] - 1.) * box_side + box_anchor[2];
+}
+
+static inline double geometry3d_compute_circumradius_adaptive(
+        struct geometry3d *restrict g, const double *restrict v0,
+        const double *restrict v1, const double *restrict v2,
+        const double *restrict v3, const unsigned long *restrict v0ul,
+        const unsigned long *restrict v1ul, const unsigned long *restrict v2ul,
+        const unsigned long *restrict v3ul, double box_side) {
+
+  /* Calculate relative circumcenter (relative to v0, rescaled coordinates) */
+  double circumcenter[3];
+  geometry3d_compute_circumcenter_relative_adaptive(
+          g, v0, v1, v2, v3, v0ul, v1ul, v2ul, v3ul, circumcenter);
+
+  /* Calculate and rescale radius */
+  double radius = sqrt(circumcenter[0] * circumcenter[0] +
+                       circumcenter[1] * circumcenter[1] +
+                       circumcenter[2] * circumcenter[2]);
+  return radius * box_side;
 }
 
 inline static double geometry3d_compute_area_triangle(double ax, double ay,
@@ -542,16 +756,16 @@ inline static double geometry3d_compute_area_triangle(double ax, double ay,
 }
 
 inline static void geometry3d_compute_centroid_triangle(
-    double ax, double ay, double az, double bx, double by, double bz, double cx,
-    double cy, double cz, double* result) {
+        double ax, double ay, double az, double bx, double by, double bz, double cx,
+        double cy, double cz, double *result) {
   result[0] = (ax + bx + cx) / 3.;
   result[1] = (ay + by + cy) / 3.;
   result[2] = (az + bz + cz) / 3.;
 }
 
 inline static double geometry3d_compute_volume_tetrahedron(
-    double ax, double ay, double az, double bx, double by, double bz, double cx,
-    double cy, double cz, double dx, double dy, double dz) {
+        double ax, double ay, double az, double bx, double by, double bz, double cx,
+        double cy, double cz, double dx, double dy, double dz) {
   /* Compute relative coordinates */
   const double dax = ax - dx;
   const double day = ay - dy;
@@ -571,17 +785,53 @@ inline static double geometry3d_compute_volume_tetrahedron(
   return fabs(dax * cross_x - day * cross_y + daz * cross_z) / 6.;
 }
 
+inline static void geometry3d_compute_centroid_tetrahedron_exact(
+        unsigned long ax, unsigned long ay, unsigned long az, unsigned long bx,
+        unsigned long by, unsigned long bz, unsigned long cx, unsigned long cy,
+        unsigned long cz, unsigned long dx, unsigned long dy, unsigned long dz,
+        unsigned long *result) {
+  /* x coordinate */
+  unsigned long a_rem = ax % 4;
+  unsigned long b_rem = bx % 4;
+  unsigned long c_rem = cx % 4;
+  unsigned long d_rem = dx % 4;
+  unsigned long rem_sum = a_rem + b_rem + c_rem + d_rem;
+  unsigned long average = ax / 4 + bx / 4 + cx / 4 + dx / 4 + rem_sum / 4;
+  if (rem_sum % 4 > 1) average++;
+  result[0] = average;
+
+  /* y coordinate */
+  a_rem = ay % 4;
+  b_rem = by % 4;
+  c_rem = cy % 4;
+  d_rem = dy % 4;
+  rem_sum = a_rem + b_rem + c_rem + d_rem;
+  average = ay / 4 + by / 4 + cy / 4 + dy / 4 + rem_sum / 4;
+  if (rem_sum % 4 > 1) average++;
+  result[1] = average;
+
+  /* z coordinate */
+  a_rem = az % 4;
+  b_rem = bz % 4;
+  c_rem = cz % 4;
+  d_rem = dz % 4;
+  rem_sum = a_rem + b_rem + c_rem + d_rem;
+  average = az / 4 + bz / 4 + cz / 4 + dz / 4 + rem_sum / 4;
+  if (rem_sum % 4 > 1) average++;
+  result[2] = average;
+}
+
 inline static void geometry3d_compute_centroid_tetrahedron(
-    double ax, double ay, double az, double bx, double by, double bz, double cx,
-    double cy, double cz, double dx, double dy, double dz, double* result) {
+        double ax, double ay, double az, double bx, double by, double bz, double cx,
+        double cy, double cz, double dx, double dy, double dz, double *result) {
   result[0] = (ax + bx + cx + dx) / 4.;
   result[1] = (ay + by + cy + dy) / 4.;
   result[2] = (az + bz + cz + dz) / 4.;
 }
 
 inline static double geometry3d_compute_centroid_volume_tetrahedron(
-    double ax, double ay, double az, double bx, double by, double bz, double cx,
-    double cy, double cz, double dx, double dy, double dz, double* result) {
+        double ax, double ay, double az, double bx, double by, double bz, double cx,
+        double cy, double cz, double dx, double dy, double dz, double *result) {
   geometry3d_compute_centroid_tetrahedron(ax, ay, az, bx, by, bz, cx, cy, cz,
                                           dx, dy, dz, result);
   return geometry3d_compute_volume_tetrahedron(ax, ay, az, bx, by, bz, cx, cy,
@@ -589,7 +839,7 @@ inline static double geometry3d_compute_centroid_volume_tetrahedron(
 }
 
 inline static double geometry3d_compute_centroid_area(
-    const double* restrict points, int n_points, double* result) {
+        const double *restrict points, int n_points, double *result) {
   /* Calculate centroid */
   result[0] = 0.;
   result[1] = 0.;
@@ -616,6 +866,201 @@ inline static double geometry3d_compute_centroid_area(
             points[3 * i], points[3 * i + 1], points[3 * i + 2]);
   }
   return V;
+}
+
+inline static void geometry3d_cross(const double *v1, const double *v2,
+                                    double *restrict out_cross) {
+  out_cross[0] = v1[1] * v2[2] - v1[2] * v2[1];
+  out_cross[1] = v2[0] * v1[2] - v2[2] * v1[0];
+  out_cross[2] = v1[0] * v2[1] - v1[1] * v2[0];
+}
+
+inline static double geometry3d_dot(const double *v1, const double *v2) {
+  return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
+}
+
+inline static int geometry3d_ray_plane_intersect(
+        const double *restrict ray_origin, const double *restrict ray_direction,
+        const double *restrict p1, const double *restrict p2,
+        const double *restrict p3, double *restrict out_distance) {
+
+  /* Setup useful variables */
+  /* Vectors determining plane */
+  const double v1[3] = {p1[0] - p3[0], p1[1] - p3[1], p1[2] - p3[2]};
+  const double v2[3] = {p2[0] - p3[0], p2[1] - p3[1], p2[2] - p3[2]};
+  /* Normal vector to plane */
+  double n[3];
+  geometry3d_cross(v1, v2, n);
+
+  /* Compute result (see Camps 2013) */
+  double denominator = geometry3d_dot(n, ray_direction);
+  if (denominator == 0.) {
+    *out_distance = DBL_MAX;
+    return 0;
+  }
+  double numerator = n[0] * (p3[0] - ray_origin[0]) +
+                     n[1] * (p3[1] - ray_origin[1]) +
+                     n[2] * (p3[2] - ray_origin[2]);
+  *out_distance = numerator / denominator;
+  return 0;
+}
+
+inline static int geometry3d_ray_triangle_intersect(
+        const double *restrict ray_origin, const double *restrict ray_direction,
+        const double *restrict p1, const double *restrict p2,
+        const double *restrict p3, double *out_distance) {
+
+  /* Setup useful variables */
+  /* edges of triangle */
+  const double edge1[3] = {p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]};
+  const double edge2[3] = {p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]};
+
+  double h[3];
+  geometry3d_cross(ray_direction, edge2, h);
+  double a = geometry3d_dot(edge1, h);
+  if (a == 0) {
+    /* Ray parallel to triangle */
+    *out_distance = INFINITY;
+    return 0;
+  }
+
+  double f = 1.0 / a;
+  double s[3] = {ray_origin[0] - p1[0], ray_origin[1] - p1[1],
+                 ray_origin[2] - p1[2]};
+  double u = f * geometry3d_dot(s, h);
+
+  double q[3];
+  geometry3d_cross(s, edge1, q);
+  double v = f * geometry3d_dot(ray_direction, q);
+
+  *out_distance = f * geometry3d_dot(edge2, q);
+  return (u >= 0.0 && v >= 0.0 && u + v <= 1.0);
+}
+
+inline static int geometry3d_ray_triangle_intersect_exact(
+        struct geometry3d *g, const struct ray *r, const unsigned long *p1,
+        const unsigned long *p2, const unsigned long *p3, double *out_distance) {
+  mpz_set_ui(g->aix, p1[0]);
+  mpz_set_ui(g->aiy, p1[1]);
+  mpz_set_ui(g->aiz, p1[2]);
+
+  mpz_set_ui(g->bix, p2[0]);
+  mpz_set_ui(g->biy, p2[1]);
+  mpz_set_ui(g->biz, p2[2]);
+
+  mpz_set_ui(g->cix, p3[0]);
+  mpz_set_ui(g->ciy, p3[1]);
+  mpz_set_ui(g->ciz, p3[2]);
+
+  mpz_set_ui(g->dix, r->origin_ul[0]);
+  mpz_set_ui(g->diy, r->origin_ul[1]);
+  mpz_set_ui(g->diz, r->origin_ul[2]);
+
+  mpz_set_ui(g->eix, r->end_ul[0]);
+  mpz_set_ui(g->eiy, r->end_ul[1]);
+  mpz_set_ui(g->eiz, r->end_ul[2]);
+
+  /* edge1 */
+  mpz_sub(g->s1x, g->bix, g->aix);
+  mpz_sub(g->s1y, g->biy, g->aiy);
+  mpz_sub(g->s1z, g->biz, g->aiz);
+
+  /* edge2 */
+  mpz_sub(g->s2x, g->cix, g->aix);
+  mpz_sub(g->s2y, g->ciy, g->aiy);
+  mpz_sub(g->s2z, g->ciz, g->aiz);
+
+  /* direction */
+  mpz_sub(g->s3x, g->eix, g->dix);
+  mpz_sub(g->s3y, g->eiy, g->diy);
+  mpz_sub(g->s3z, g->eiz, g->diz);
+
+  double direction[3] = {mpz_get_d(g->s3x) / 0x10000000000000llu,
+                         mpz_get_d(g->s3y) / 0x10000000000000llu,
+                         mpz_get_d(g->s3z) / 0x10000000000000llu};
+  double norm = sqrt(direction[0] * direction[0] + direction[1] * direction[1] + direction[2] * direction[2]);
+  direction[0] /= norm;
+  direction[1] /= norm;
+  direction[2] /= norm;
+
+  /* calculate h = direction x edge2 */
+  mpz_mul(g->s4x, g->s3y, g->s2z);
+  mpz_submul(g->s4x, g->s3z, g->s2y);
+  mpz_mul(g->s4y, g->s3z, g->s2x);
+  mpz_submul(g->s4y, g->s3x, g->s2z);
+  mpz_mul(g->s4z, g->s3x, g->s2y);
+  mpz_submul(g->s4z, g->s3y, g->s2x);
+
+  double h[3] = {mpz_get_d(g->s4x) / 0x10000000000000llu / 0x10000000000000llu / norm,
+                 mpz_get_d(g->s4y) / 0x10000000000000llu / 0x10000000000000llu / norm,
+                 mpz_get_d(g->s4z) / 0x10000000000000llu / 0x10000000000000llu / norm};
+
+  /* calculate a = edge1 . h */
+  mpz_mul(g->result, g->s1x, g->s4x);
+  mpz_addmul(g->result, g->s1y, g->s4y);
+  mpz_addmul(g->result, g->s1z, g->s4z);
+  if (mpz_sgn(g->result) == 0) {
+    /* Ray parallel to plane */
+    *out_distance = INFINITY;
+    return 0;
+  }
+
+  /* calculate s = ray_origin - p1 */
+  mpz_sub(g->tmp1, g->dix, g->aix);
+  mpz_sub(g->tmp2, g->diy, g->aiy);
+  mpz_sub(g->tmp3, g->diz, g->aiz);
+
+  /* calculate u * a = s . h */
+  mpz_mul(g->tmp7, g->tmp1, g->s4x);
+  mpz_addmul(g->tmp7, g->tmp2, g->s4y);
+  mpz_addmul(g->tmp7, g->tmp3, g->s4z);
+
+  /* calculate q = s x edge1 */
+  mpz_mul(g->tmp4, g->tmp2, g->s1z);
+  mpz_submul(g->tmp4, g->tmp3, g->s1y);
+  mpz_mul(g->tmp5, g->tmp3, g->s1x);
+  mpz_submul(g->tmp5, g->tmp1, g->s1z);
+  mpz_mul(g->tmp6, g->tmp1, g->s1y);
+  mpz_submul(g->tmp6, g->tmp2, g->s1x);
+
+  /* calculate v * a = direction . q */
+  mpz_mul(g->tmp8, g->s3x, g->tmp4);
+  mpz_addmul(g->tmp8, g->s3y, g->tmp5);
+  mpz_addmul(g->tmp8, g->s3z, g->tmp6);
+
+  /* calculate a * (u + v) */
+  mpz_add(g->tmp1, g->tmp7, g->tmp8);
+
+  /* calculate a * distance = edge2 . q */
+  mpz_mul(g->tmp2, g->s2x, g->tmp4);
+  mpz_addmul(g->tmp2, g->s2y, g->tmp5);
+  mpz_addmul(g->tmp2, g->s2z, g->tmp6);
+
+  /* Calculate squared norm of direction */
+  mpz_mul(g->tmp3, g->s3x, g->s3x);
+  mpz_addmul(g->tmp3, g->s3y, g->s3y);
+  mpz_addmul(g->tmp3, g->s3z, g->s3z);
+
+  /* calculate distance */
+  mpf_set_z(g->frac_n, g->tmp2);
+  mpf_set_z(g->frac_d, g->result);
+  mpf_div(g->frac_result, g->frac_n, g->frac_d);
+  /* Multiply result by norm to compensate for un-normalized direction in a */
+  mpf_set_z(g->frac_d, g->tmp3);
+  mpf_sqrt(g->frac_n, g->frac_d);
+  mpf_mul(g->frac_result, g->frac_result, g->frac_n);
+  *out_distance = mpf_get_d(g->frac_result) / 0x10000000000000llu;
+
+  /* intersects or not? (u >= 0, v >= 0, u + v <= 1.) */
+  int sgn_a = mpz_sgn(g->result);
+  if ((mpz_sgn(g->tmp7) == sgn_a) && (mpz_sgn(g->tmp8) == sgn_a)) {
+    if (sgn_a > 0) {
+      return mpz_cmp(g->tmp1, g->result) <= 0;
+    } else {
+      return mpz_cmp(g->tmp1, g->result) >= 0;
+    }
+  }
+  return 0;
 }
 
 #endif  // CVORONOI_GEOMETRY3D_H
