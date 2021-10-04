@@ -185,7 +185,7 @@ inline static void test_ray_triangle_intersection() {
   ray_init(&r, p0, p4, p0ul, p4ul);
 
   double distance;
-  int intersects = geometry3d_ray_triangle_intersect(r.origin, r.direction, p1, p2, p3, &distance);
+  int intersects = geometry3d_ray_triangle_intersect_non_exact(&r, p1, p2, p3, &distance);
   assert(intersects);
 
   struct geometry3d g;
@@ -193,6 +193,10 @@ inline static void test_ray_triangle_intersection() {
   double distance_exact;
   int intersects_exact = geometry3d_ray_triangle_intersect_exact(&g, &r, p1ul, p2ul, p3ul, &distance_exact);
   assert(intersects_exact);
+
+  double distance_adaptive;
+  int intersects_adaptive = geometry3d_ray_triangle_intersect(&g, &r, p1, p2, p3, p1ul, p2ul, p3ul, &distance_adaptive);
+  assert(intersects_adaptive);
 
   assert(fabs(distance - distance_exact) / distance < 1e-10);
 
@@ -214,11 +218,13 @@ inline static void test_ray_triangle_intersection() {
 
     ray_init(&r, p0, p4, p0ul, p4ul);
 
-    intersects = geometry3d_ray_triangle_intersect(r.origin, r.direction, p1, p2, p3, &distance);
+    intersects = geometry3d_ray_triangle_intersect_non_exact(&r, p1, p2, p3, &distance);
     intersects_exact = geometry3d_ray_triangle_intersect_exact(&g, &r, p1ul, p2ul, p3ul, &distance_exact);
+    intersects_adaptive = geometry3d_ray_triangle_intersect(&g, &r, p1, p2, p3, p1ul, p2ul, p3ul, &distance_adaptive);
 
     assert(intersects_exact == intersects);
-    assert((isinf(distance) && isinf(distance_exact)) || fabs(distance - distance_exact) / fabs(distance) < 1e-9);
+    assert((isinf(distance) && isinf(distance_exact) && isinf(distance_adaptive))
+            || (fabs(distance - distance_exact) / fabs(distance) < 1e-9 && fabs(distance - distance_adaptive) / fabs(distance) < 1e-9));
   }
   geometry3d_destroy(&g);
 }
