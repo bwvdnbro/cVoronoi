@@ -912,36 +912,79 @@ inline static int geometry3d_ray_plane_intersect(
   return 0;
 }
 
-inline static int geometry3d_ray_triangle_intersect(
-        const double *restrict ray_origin, const double *restrict ray_direction,
-        const double *restrict p1, const double *restrict p2,
-        const double *restrict p3, double *out_distance) {
+inline static int geometry3d_ray_triangle_intersect_non_exact(
+        const struct ray *r, const double *restrict p1, const double *restrict p2, const double *restrict p3,
+        double *out_distance) {
+
+
+  const double errbound_factor = 1e-10;
 
   /* Setup useful variables */
   /* edges of triangle */
-  const double edge1[3] = {p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]};
-  const double edge2[3] = {p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]};
+  const double e1[3] = {p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]};
+  const double e2[3] = {p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]};
 
-  double h[3];
-  geometry3d_cross(ray_direction, edge2, h);
-  double a = geometry3d_dot(edge1, h);
-  if (a == 0) {
-    /* Ray parallel to triangle */
+  const double dxe2y = r->direction[0] * e2[1];
+  const double dye2x = r->direction[1] * e2[0];
+  const double dxe2z = r->direction[0] * e2[2];
+  const double dze2x = r->direction[2] * e2[0];
+  const double dye2z = r->direction[1] * e2[2];
+  const double dze2y = r->direction[2] * e2[1];
+
+  const double h[3] = {dye2z - dze2y, dze2x - dxe2z, dxe2y - dye2x};
+
+  const double a = geometry3d_dot(e1, h);
+  double errbound = fabs(e1[0]) * (fabs(dxe2y) + fabs(dye2x)) +
+                    fabs(e1[1]) * (fabs(dze2x) + fabs(dxe2z)) +
+                    fabs(e1[2]) * (fabs(dye2z) + fabs(dze2y));
+  errbound *= errbound_factor;
+  if (-errbound < a && a < errbound) {
+    /* Ray approximately parallel to triangle, try exact method */
     *out_distance = INFINITY;
     return 0;
   }
 
   double f = 1.0 / a;
-  double s[3] = {ray_origin[0] - p1[0], ray_origin[1] - p1[1],
-                 ray_origin[2] - p1[2]};
+  double s[3] = {r->origin[0] - p1[0], r->origin[1] - p1[1],
+                 r->origin[2] - p1[2]};
   double u = f * geometry3d_dot(s, h);
+  errbound = fabs(f) * (fabs(e1[0]) * (fabs(dxe2y) + fabs(dye2x)) +
+                        fabs(e1[1]) * (fabs(dze2x) + fabs(dxe2z)) +
+                        fabs(e1[2]) * (fabs(dye2z) + fabs(dze2y)));
+  errbound *= errbound_factor;
+  if (-errbound < u && u < errbound) return 0;
 
-  double q[3];
-  geometry3d_cross(s, edge1, q);
-  double v = f * geometry3d_dot(ray_direction, q);
+  const double sxe1y = s[0] * e1[1];
+  const double sye1x = s[1] * e1[0];
+  const double sxe1z = s[0] * e1[2];
+  const double sze1x = s[2] * e1[0];
+  const double sye1z = s[1] * e1[2];
+  const double sze1y = s[2] * e1[1];
 
-  *out_distance = f * geometry3d_dot(edge2, q);
-  return (u >= 0.0 && v >= 0.0 && u + v <= 1.0);
+  double q[3] = {sye1z - sze1y, sze1x - sxe1z, sxe1y - sye1x};
+  double v = f * geometry3d_dot(r->direction, q);
+  errbound = fabs(f) * (fabs(r->direction[0]) * (fabs(sye1z) + fabs(sze1y)) +
+                        fabs(r->direction[1]) * (fabs(sze1x) + fabs(sxe1z)) +
+                        fabs(r->direction[2]) * (fabs(sxe1y) + fabs(sye1x)));
+  errbound *= errbound_factor;
+  if (-errbound < v && v < errbound) return 0;
+
+  double u_plus_v_minus_1 = u + v - 1;
+  errbound = errbound_factor * (fabs(u) + fabs(v) + 1.);
+  if (-errbound < u_plus_v_minus_1 && u_plus_v_minus_1 < errbound) {
+    /* exact test needed */
+    return 0;
+  }
+
+  double d = f * geometry3d_dot(e2, q);
+  errbound = fabs(f) * (fabs(e2[0]) * (fabs(sye1z) + fabs(sze1y)) +
+                        fabs(e2[1]) * (fabs(sze1x) + fabs(sxe1z)) +
+                        fabs(e2[2]) * (fabs(sxe1y) + fabs(sye1x)));
+  errbound *= errbound_factor;
+  if (-errbound < d && d < errbound) return 0;
+
+  *out_distance = d;
+  return (u >= 0.0 && v >= 0.0 && u_plus_v_minus_1 <= 0.0);
 }
 
 inline static int geometry3d_ray_triangle_intersect_exact(
@@ -1056,6 +1099,20 @@ inline static int geometry3d_ray_triangle_intersect_exact(
     }
   }
   return 0;
+}
+
+inline static int geometry3d_ray_triangle_intersect(
+        struct geometry3d* g, const struct ray* r, const double* p1,
+        const double* p2, const double* p3, const unsigned long* p1ul,
+        const unsigned long* p2ul, const unsigned long* p3ul,
+        double* out_distance) {
+  int intersection_result =
+          geometry3d_ray_triangle_intersect_non_exact(r, p1, p2, p3, out_distance);
+
+  if (!intersection_result) {
+    return geometry3d_ray_triangle_intersect_exact(g, r, p1ul, p2ul, p3ul,
+                                                   out_distance);
+  }
 }
 
 #endif  // CVORONOI_GEOMETRY3D_H
